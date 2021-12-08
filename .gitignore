@@ -1,0 +1,10 @@
+/.idea/
+/.vs/
+/.vscode/
+bin/
+obj/
+msbuild.binlog
+msbuild.*.binlog
+*.*proj.user
+*.DotSettings.user
+*.userprefs
