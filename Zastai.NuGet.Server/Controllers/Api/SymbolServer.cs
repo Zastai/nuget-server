@@ -2,6 +2,8 @@ using System.Net;
 
 using Microsoft.AspNetCore.Mvc;
 
+using Zastai.NuGet.Server.Services;
+
 namespace Zastai.NuGet.Server.Controllers.Api;
 
 /// <summary>A Microsoft Symbol Store over HTTP(s), serving PDB files taken from pushed symbol packages.</summary>
@@ -14,8 +16,12 @@ public sealed class SymbolServer : ApiController<SymbolServer> {
 
   /// <summary>Creates a new symbol server controller.</summary>
   /// <param name="logger">A logger for the controller.</param>
-  public SymbolServer(ILogger<SymbolServer> logger) : base(logger) {
+  /// <param name="symbolStore">The symbol store to use.</param>
+  public SymbolServer(ILogger<SymbolServer> logger, ISymbolStore symbolStore) : base(logger) {
+    this._symbolStore = symbolStore;
   }
+
+  private readonly ISymbolStore _symbolStore;
 
   /// <summary>Retrieve (the contents of) a compressed PDB file.</summary>
   /// <remarks>
@@ -57,7 +63,7 @@ public sealed class SymbolServer : ApiController<SymbolServer> {
       this.Logger.LogWarning("Request with inconsistent symbol file name (\"{name}.pdb\" vs \"{file}.pdb\").", name, file);
       return this.NotFound();
     }
-    var pdb = SymbolStore.Open(name, signature);
+    var pdb = this._symbolStore.Open(name, signature);
     if (pdb is null) {
       this.Logger.LogWarning("Asked for symbols (PDB file) for {name} (signature: {signature}), but they were not available.", name,
                              signature);

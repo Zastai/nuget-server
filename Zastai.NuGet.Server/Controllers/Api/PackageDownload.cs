@@ -2,6 +2,8 @@
 
 using Microsoft.AspNetCore.Mvc;
 
+using Zastai.NuGet.Server.Services;
+
 namespace Zastai.NuGet.Server.Controllers.Api;
 
 /// <summary>A package download service.</summary>
@@ -14,8 +16,12 @@ public class PackageDownload : ApiController<PackageDownload> {
 
   /// <summary>Creates a new package download service controller.</summary>
   /// <param name="logger">A logger for the controller.</param>
-  public PackageDownload(ILogger<PackageDownload> logger) : base(logger) {
+  /// <param name="packageStore">The package store to use.</param>
+  public PackageDownload(ILogger<PackageDownload> logger, IPackageStore packageStore) : base(logger) {
+    this._packageStore = packageStore;
   }
+
+  private readonly IPackageStore _packageStore;
 
   /// <summary>Retrieve a package.</summary>
   /// <param name="id">The package ID.</param>
@@ -29,18 +35,19 @@ public class PackageDownload : ApiController<PackageDownload> {
   [ProducesResponseType(typeof(void), (int) HttpStatusCode.NotFound)]
   public IActionResult DownloadPackageFile(string id, string version, string file) {
     // FIXME: Or should this validation be in PackageStore?
-    if (!file.EndsWith(PackageStore.PackageExtension) && !file.EndsWith(PackageStore.SymbolPackageExtension)) {
-      this.Logger.LogWarning("Asked for a package file with an invalid extension ({file}) for {id} {version}.", file, id, version);
+    if (!this._packageStore.IsDownloadableFile(file)) {
+      this.Logger.LogWarning("Asked for a file from package {id} {version} that is not allowed for download ({file}).", id, version,
+                             file);
       return this.NotFound();
     }
     // FIXME: Should this validate that id and version are lower case (and that version is normalized)?
     // FIXME: Should this validate that file == {id}.{version}.[s]nupkg?
-    var package = PackageStore.Open(id, version, file);
+    var package = this._packageStore.Open(id, version, file);
     if (package is null) {
-      this.Logger.LogWarning("Asked for a package file ({file}) for {id} {version}, but it was not available.", file, id, version);
+      this.Logger.LogWarning("Asked for a file from package {id} {version} that is not available ({file}).", id, version, file);
       return this.NotFound();
     }
-    this.Logger.LogWarning("Returning package file ({file}) for {id} {version}.", file, id, version);
+    this.Logger.LogInformation("Returning a file from package {id} {version} ({file}).", id, version, file);
     return this.File(package, PackageDownload.PackageContentType, file);
   }
 

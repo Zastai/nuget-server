@@ -1,10 +1,65 @@
 ﻿using System.Reflection.Metadata;
 using System.Text;
 
-namespace Zastai.NuGet.Server;
+namespace Zastai.NuGet.Server.Services;
 
-/// <summary>Utilities for working with the symbols store.</summary>
-public static class SymbolStore {
+/// <summary>A symbol store.</summary>
+public class SymbolStore : ISymbolStore {
+
+  /// <summary>Creates a new symbol store.</summary>
+  /// <param name="logger">A logger for the symbol store.</param>
+  public SymbolStore(ILogger<SymbolStore> logger) {
+    this._logger = logger;
+  }
+
+  /// <summary>The logger for this symbol store.</summary>
+  private readonly ILogger<SymbolStore> _logger;
+
+  #region ISymbolStore
+
+  /// <inheritdoc />
+  public string GetSignature(Stream stream) {
+    var startPosition = stream.Position;
+    // Assume Portable PDB format, for which the framework provides handling.
+    var guid = SymbolStore.GetPortableSignature(stream);
+    if (guid is null && stream.CanSeek) { // Otherwise, if we can rewind, try to handle it as a native PDB
+      stream.Position = startPosition;
+      guid = SymbolStore.GetNativeSignature(stream);
+    }
+    if (guid is null) {
+      throw new BadImageFormatException("Failed to extract the symbol file signature.");
+    }
+    return guid.Value.ToString("N").ToUpperInvariant() + "1";
+  }
+
+  /// <inheritdoc />
+  public string GetSignature(string path) {
+    using var fs = File.OpenRead(path);
+    return this.GetSignature(fs);
+  }
+
+  /// <inheritdoc />
+  public Stream? Open(string name, string signature) {
+    string? path = null;
+    // TODO: Compose actual path.
+    if (path is null) {
+      return null;
+    }
+    path = Path.Combine(path, name + ".pdb");
+    if (!File.Exists(path)) {
+      return null;
+    }
+    var actualSignature = this.GetSignature(path);
+    if (signature == actualSignature) {
+      return File.OpenRead(path);
+    }
+    var msg = $"Found a PDB file for signature '{signature}' but it has a different signature ('{actualSignature}').";
+    throw new InvalidOperationException(msg);
+  }
+
+  #endregion
+
+  #region Internals
 
   private static readonly byte[] NativePDBHeaderMagic = Encoding.ASCII.GetBytes("Microsoft C/C++ MSF 7.00\r\n\x001ADS\0\0\0");
 
@@ -99,54 +154,6 @@ public static class SymbolStore {
     }
   }
 
-  /// <summary>Gets the signature string for a (portable) PDB file.</summary>
-  /// <param name="stream">A stream containing the the PDB file to get the signature for.</param>
-  /// <returns>The PDB signature; this is the string that will be used by a symbol store client to request that PDB.</returns>
-  public static string GetSignature(Stream stream) {
-    var startPosition = stream.Position;
-    // Assume Portable PDB format, for which the framework provides handling.
-    var guid = SymbolStore.GetPortableSignature(stream);
-    if (guid is null && stream.CanSeek) { // Otherwise, if we can rewind, try to handle it as a native PDB
-      stream.Position = startPosition;
-      guid = SymbolStore.GetNativeSignature(stream);
-    }
-    if (guid is null) {
-      throw new BadImageFormatException("Failed to extract the symbol file signature.");
-    }
-    return guid.Value.ToString("N").ToUpperInvariant() + "1";
-  }
-
-  /// <summary>Gets the signature string for a (portable) PDB file.</summary>
-  /// <param name="path">The path the the PDB file to get the signature for.</param>
-  /// <returns>The PDB signature; this is the string that will be used by a symbol store client to request that PDB.</returns>
-  public static string GetSignature(string path) {
-    using var fs = File.OpenRead(path);
-    return SymbolStore.GetSignature(fs);
-  }
-
-  /// <summary>Attempts to open a symbol file (.pdb) with a particular signature.</summary>
-  /// <param name="name">The name of the requested symbol file (without extension).</param>
-  /// <param name="signature">The requested signature.</param>
-  /// <returns>A stream for reading the requested symbol file, or <see langword="null"/> if it is not available.</returns>
-  /// <exception cref="InvalidOperationException">
-  /// When the symbol file is found, but its signature does not match the requested signature.
-  /// </exception>
-  public static Stream? Open(string name, string signature) {
-    string? path = null;
-    // TODO: Compose actual path.
-    if (path is null) {
-      return null;
-    }
-    path = Path.Combine(path, name + ".pdb");
-    if (!File.Exists(path)) {
-      return null;
-    }
-    var actualSignature = SymbolStore.GetSignature(path);
-    if (signature == actualSignature) {
-      return File.OpenRead(path);
-    }
-    var msg = $"Found a PDB file for signature '{signature}' but it has a different signature ('{actualSignature}').";
-    throw new InvalidOperationException(msg);
-  }
+  #endregion
 
 }
