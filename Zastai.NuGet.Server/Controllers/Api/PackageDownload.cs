@@ -1,6 +1,4 @@
-﻿using System.Net;
-
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 
 using Zastai.NuGet.Server.Services;
 
@@ -31,8 +29,8 @@ public class PackageDownload : ApiController<PackageDownload> {
   /// <response code="200">When the requested package is being returned.</response>
   /// <response code="404">When the requested package is not available.</response>
   [HttpGet("{id}/{version}/{file}")]
-  [ProducesResponseType(typeof(IEnumerable<byte>), (int) HttpStatusCode.OK, PackageDownload.PackageContentType)]
-  [ProducesResponseType(typeof(void), (int) HttpStatusCode.NotFound)]
+  [ProducesResponseType(typeof(IEnumerable<byte>), StatusCodes.Status200OK, PackageDownload.PackageContentType)]
+  [ProducesResponseType(typeof(void), StatusCodes.Status404NotFound)]
   public IActionResult DownloadPackageFile(string id, string version, string file) {
     // FIXME: Or should this validation be in PackageStore?
     if (!this._packageStore.IsDownloadableFile(file)) {
