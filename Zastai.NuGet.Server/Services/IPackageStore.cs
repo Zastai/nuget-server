@@ -1,7 +1,19 @@
-﻿namespace Zastai.NuGet.Server.Services;
+﻿using Microsoft.AspNetCore.Mvc;
+
+namespace Zastai.NuGet.Server.Services;
 
 /// <summary>A package store.</summary>
 public interface IPackageStore {
+
+  /// <summary>Adds a package to the store.</summary>
+  /// <param name="file">The package file.</param>
+  /// <returns>The result of the operation.</returns>
+  public Task<IActionResult> AddPackageAsync(IFormFile file);
+
+  /// <summary>Adds a symbol package to the store.</summary>
+  /// <param name="file">The symbol package file.</param>
+  /// <returns>The result of the operation.</returns>
+  public Task<IActionResult> AddSymbolPackageAsync(IFormFile file);
 
   /// <summary>Determines whether or not a give file is allowed to be downloaded.</summary>
   /// <param name="file">The file for which download is requested.</param>
