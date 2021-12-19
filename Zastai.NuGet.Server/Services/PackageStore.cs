@@ -13,13 +13,13 @@ public class PackageStore : IPackageStore {
   /// <summary>Creates a new package store.</summary>
   /// <param name="logger">A logger for the package store.</param>
   /// <param name="host">The host environment.</param>
-  public PackageStore(ILogger<PackageStore> logger, IHostEnvironment host) {
+  /// <param name="symbolStore">The symbol store to use for PDB files from symbol packages.</param>
+  public PackageStore(ILogger<PackageStore> logger, IHostEnvironment host, ISymbolStore symbolStore) {
     this._logger = logger;
-    this._tempFolder = Path.Combine(host.ContentRootPath, "data", "temp", "publish");
     this._packageFolder = Path.Combine(host.ContentRootPath, "data", "packages");
+    this._symbolStore = symbolStore;
+    this._tempFolder = Path.Combine(host.ContentRootPath, "data", "temp", "publish");
   }
-
-  private readonly ILogger<PackageStore> _logger;
 
   #region IPackageStore
 
@@ -36,7 +36,7 @@ public class PackageStore : IPackageStore {
       if (Directory.Exists(packageDir)) {
         return new ConflictResult();
       }
-      if (!this.StorePackageFile(tempFile, packageDir, id, version, PackageStore.PackageExtension)) {
+      if (this.StorePackageFile(tempFile, packageDir, id, version, PackageStore.PackageExtension) is null) {
         return new ConflictResult();
       }
       { // Store the manifest in a separate file too
@@ -64,10 +64,29 @@ public class PackageStore : IPackageStore {
       if (!Directory.Exists(packageDir)) {
         return new NotFoundResult();
       }
-      if (!this.StorePackageFile(tempFile, packageDir, id, version, PackageStore.SymbolPackageExtension)) {
+      var packagePath = this.StorePackageFile(tempFile, packageDir, id, version, PackageStore.SymbolPackageExtension);
+      if (packagePath is null) {
         return new ConflictResult();
       }
-      // TODO: Scan the package for .pdb files and add them to the symbol store.
+      try {
+        await using var stream = new FileStream(packagePath, FileMode.Open, FileAccess.Read, FileShare.None);
+        using var zip = new ZipArchive(stream, ZipArchiveMode.Read);
+        foreach (var entry in zip.Entries) {
+          if (!entry.Name.EndsWith(".pdb")) {
+            continue;
+          }
+          try {
+            await using var pdbStream = entry.Open();
+            await this._symbolStore.AddSymbolFileAsync(entry.Name.Remove(entry.Name.Length - 4), pdbStream);
+          }
+          catch (Exception e) {
+            this._logger.LogError("Failed to process PDB file ({pdb}) in package: {e}", entry.Name, e);
+          }
+        }
+      }
+      catch (Exception e) {
+        this._logger.LogError("Failed to process PDB files in package: {e}", e);
+      }
       // TODO: Construct a URI that points to the corresponding PackageDownload.DownloadPackageFile().
       return new CreatedResult("", null);
     });
@@ -100,7 +119,11 @@ public class PackageStore : IPackageStore {
   /// <summary>The extension used by symbol package files.</summary>
   private const string SymbolPackageExtension = ".snupkg";
 
+  private readonly ILogger<PackageStore> _logger;
+
   private readonly string _packageFolder;
+
+  private readonly ISymbolStore _symbolStore;
 
   private readonly string _tempFolder;
 
@@ -290,17 +313,17 @@ public class PackageStore : IPackageStore {
     }
   }
 
-  private bool StorePackageFile(string tempFile, string packageDir, string id, string version, string ext) {
+  private string? StorePackageFile(string tempFile, string packageDir, string id, string version, string ext) {
     Directory.CreateDirectory(packageDir);
     var packagePath = Path.Combine(packageDir, $"{id}.{version}{ext}");
     try {
       File.Move(tempFile, packagePath, ext == PackageStore.SymbolPackageExtension);
       this._logger.LogInformation("Stored package in {path}.", packagePath);
-      return true;
+      return packagePath;
     }
     catch (Exception e) {
       this._logger.LogWarning("Failed to store package in {path}: {e}", packagePath, e);
-      return false;
+      return null;
     }
   }
 

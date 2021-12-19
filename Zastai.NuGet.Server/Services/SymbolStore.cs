@@ -8,14 +8,32 @@ public class SymbolStore : ISymbolStore {
 
   /// <summary>Creates a new symbol store.</summary>
   /// <param name="logger">A logger for the symbol store.</param>
-  public SymbolStore(ILogger<SymbolStore> logger) {
+  /// <param name="host">The host environment.</param>
+  public SymbolStore(ILogger<SymbolStore> logger, IHostEnvironment host) {
     this._logger = logger;
+    this._symbolFolder = Path.Combine(host.ContentRootPath, "data", "symbols");
+    this._tempFolder = Path.Combine(host.ContentRootPath, "temp", "symbols");
   }
 
-  /// <summary>The logger for this symbol store.</summary>
-  private readonly ILogger<SymbolStore> _logger;
-
   #region ISymbolStore
+
+  /// <inheritdoc />
+  public async Task AddSymbolFileAsync(string name, Stream stream) {
+    // The stream is probably a DeflateStream from the nupkg - but those don't support positioning, and we need that.
+    // So, save it to a temp file first.
+    await this.WithTempFile(stream, async tempStream => {
+      var signature = this.GetSignature(tempStream);
+      var path = this.GetSymbolFilePath(name, signature);
+      this._logger.LogInformation("Adding symbol file: {pdb}.", path);
+      var dir = Path.GetDirectoryName(path);
+      if (dir is not null) {
+        Directory.CreateDirectory(dir);
+      }
+      await using var pdb = File.Open(path, FileMode.Create, FileAccess.Write, FileShare.None);
+      tempStream.Position = 0;
+      await tempStream.CopyToAsync(pdb);
+    });
+  }
 
   /// <inheritdoc />
   public string GetSignature(Stream stream) {
@@ -40,12 +58,7 @@ public class SymbolStore : ISymbolStore {
 
   /// <inheritdoc />
   public Stream? Open(string name, string signature) {
-    string? path = null;
-    // TODO: Compose actual path.
-    if (path is null) {
-      return null;
-    }
-    path = Path.Combine(path, name + ".pdb");
+    var path = this.GetSymbolFilePath(name, signature);
     if (!File.Exists(path)) {
       return null;
     }
@@ -64,6 +77,12 @@ public class SymbolStore : ISymbolStore {
   private static readonly byte[] NativePDBHeaderMagic = Encoding.ASCII.GetBytes("Microsoft C/C++ MSF 7.00\r\n\x001ADS\0\0\0");
 
   private static readonly byte[] NativePDBPageMagic = { 0x94, 0x2e, 0x31, 0x01 };
+
+  private readonly ILogger<SymbolStore> _logger;
+
+  private readonly string _symbolFolder;
+
+  private readonly string _tempFolder;
 
   private static Guid? GetNativeSignature(Stream stream) {
     {
@@ -151,6 +170,53 @@ public class SymbolStore : ISymbolStore {
     }
     catch (BadImageFormatException) when (stream.CanSeek) {
       return null;
+    }
+  }
+
+  private string GetSymbolFileDirectory(string name) {
+    var dot = name.IndexOf('.');
+    return dot switch {
+      // System.Text.Json.pdb -> S\System\Text.Json
+      > 0 => Path.Combine(this.SymbolFolder, name[..1], name.Remove(dot), name[(dot + 1)..]),
+      // foo.pdb -> f\foo
+      _ => Path.Combine(this.SymbolFolder, name[..1], name)
+    };
+  }
+
+  private string GetSymbolFilePath(string name, string signature)
+    => Path.Combine(this.GetSymbolFileDirectory(name), signature, name + ".pdb");
+
+  private string SymbolFolder {
+    get {
+      Directory.CreateDirectory(this._symbolFolder);
+      return this._symbolFolder;
+    }
+  }
+
+  private string TempFolder {
+    get {
+      Directory.CreateDirectory(this._tempFolder);
+      return this._tempFolder;
+    }
+  }
+
+  private async Task WithTempFile(Stream pdb, Func<Stream, Task> code) {
+    var fileName = Path.Combine(this.TempFolder, Path.GetRandomFileName());
+    this._logger.LogInformation("Temporarily storing symbol file in {fileName}.", fileName);
+    try {
+      await using var stream = new FileStream(fileName, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None);
+      await pdb.CopyToAsync(stream);
+      await stream.FlushAsync();
+      stream.Position = 0;
+      await code(stream);
+    }
+    finally {
+      try {
+        File.Delete(fileName);
+      }
+      catch (Exception e) {
+        this._logger.LogWarning("Unable to delete temporary file ({f}): {e}", fileName, e);
+      }
     }
   }
 
