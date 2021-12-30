@@ -20,6 +20,7 @@ public class PublishSymbols : ApiController<PublishSymbols> {
   private readonly IPackageStore _packageStore;
 
   /// <summary>Publish a symbols package (.snupkg file).</summary>
+  /// <param name="cancellationToken">The cancellation token to cancel the operation.</param>
   /// <returns>The result of the operation.</returns>
   /// <response code="201">When the package was published successfully.</response>
   /// <response code="400">When the package file is not valid.</response>
@@ -30,7 +31,7 @@ public class PublishSymbols : ApiController<PublishSymbols> {
   /// <response code="415">When the request body is not a form containing exactly 1 file.</response>
   [HttpPut]
   [RequireApiKey]
-  public async Task<IActionResult> Push() {
+  public async Task<IActionResult> PushAsync(CancellationToken cancellationToken) {
     if (!this.Request.HasFormContentType) {
       return this.StatusCode(StatusCodes.Status415UnsupportedMediaType);
     }
@@ -38,7 +39,7 @@ public class PublishSymbols : ApiController<PublishSymbols> {
     if (form.Files.Count != 1) {
       return this.StatusCode(StatusCodes.Status415UnsupportedMediaType, "Exactly one file should be provided.");
     }
-    return await this._packageStore.AddSymbolPackageAsync(form.Files[0]);
+    return await this._packageStore.AddSymbolPackageAsync(form.Files[0], cancellationToken);
   }
 
   #region NuGet Service Info

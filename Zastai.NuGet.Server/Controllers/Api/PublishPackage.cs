@@ -15,11 +15,15 @@ public class PublishPackage : ApiController<PublishPackage> {
   /// <summary>Creates a new package publishing service controller.</summary>
   /// <param name="logger">A logger for the controller.</param>
   /// <param name="packageStore">The package store to use.</param>
-  public PublishPackage(ILogger<PublishPackage> logger, IPackageStore packageStore) : base(logger) {
+  /// <param name="settings">The applicable settings.</param>
+  public PublishPackage(ILogger<PublishPackage> logger, IPackageStore packageStore, ISettings settings) : base(logger) {
     this._packageStore = packageStore;
+    this._settings = settings;
   }
 
   private readonly IPackageStore _packageStore;
+
+  private readonly ISettings _settings;
 
   /// <summary>Deletes a package from the server, or, if deletion is not allowed, unlists it.</summary>
   /// <param name="id">The package ID.</param>
@@ -30,18 +34,17 @@ public class PublishPackage : ApiController<PublishPackage> {
   [HttpDelete(PublishPackage.ActionPath)]
   [RequireApiKey]
   public IActionResult DeleteOrUnlist(string id, string version) {
-    // TODO:
-    // 1. If delete not allowed: 401
-    // 2. Maybe normalize the input.
-    // 3. Determine the package path.
-    // 4. If it does not exist: 404
-    // 5. If it does exist:
-    //    - Option A: delete it and 204.
-    //    - Option B: unlist it and 204.
+    if (this._settings.IsDeleteAllowed) {
+      return this._packageStore.DeletePackage(id, version) ? this.NoContent() : this.NotFound();
+    }
+    if (this._settings.IsUnlistAllowed) {
+      return this._packageStore.UnlistPackage(id, version) ? this.NoContent() : this.NotFound();
+    }
     return this.Unauthorized();
   }
 
   /// <summary>Publish a package (.nupkg file).</summary>
+  /// <param name="cancellationToken">The cancellation token to cancel the operation.</param>
   /// <returns>The result of the operation.</returns>
   /// <response code="201">When the package was published successfully.</response>
   /// <response code="400">When the package file is not valid.</response>
@@ -50,7 +53,7 @@ public class PublishPackage : ApiController<PublishPackage> {
   /// <response code="415">When the request body is not a form containing exactly 1 file.</response>
   [HttpPut]
   [RequireApiKey]
-  public async Task<IActionResult> Push() {
+  public async Task<IActionResult> PushAsync(CancellationToken cancellationToken) {
     if (!this.Request.HasFormContentType) {
       return this.StatusCode(StatusCodes.Status415UnsupportedMediaType);
     }
@@ -58,7 +61,7 @@ public class PublishPackage : ApiController<PublishPackage> {
     if (form.Files.Count != 1) {
       return this.StatusCode(StatusCodes.Status415UnsupportedMediaType, "Exactly one file should be provided.");
     }
-    return await this._packageStore.AddPackageAsync(form.Files[0]);
+    return await this._packageStore.AddPackageAsync(form.Files[0], cancellationToken);
   }
 
   /// <summary>Relists a package that was previously unlisted.</summary>
@@ -70,13 +73,10 @@ public class PublishPackage : ApiController<PublishPackage> {
   [HttpPost(PublishPackage.ActionPath)]
   [RequireApiKey]
   public IActionResult Relist(string id, string version) {
-    // TODO:
-    // 1. If relist not allowed: 401
-    // 2. Maybe normalize the input.
-    // 3. Determine the package path.
-    // 4. If it does not exist: 404
-    // 5. If it does exist: relist it and 200.
-    return this.Unauthorized();
+    if (!this._settings.IsRelistAllowed) {
+      return this.Unauthorized();
+    }
+    return this._packageStore.RelistPackage(id, version) ? this.Ok() : this.NotFound();
   }
 
   #region NuGet Service Info

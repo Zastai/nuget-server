@@ -24,7 +24,7 @@ public class PackageStore : IPackageStore {
   #region IPackageStore
 
   /// <inheritdoc />
-  public async Task<IActionResult> AddPackageAsync(IFormFile file) {
+  public async Task<IActionResult> AddPackageAsync(IFormFile file, CancellationToken cancellationToken) {
     return await this.WithTempFile<IActionResult>(file, async (tempFile, packageStream) => {
       var info = await this.GetPackageManifestInfo(packageStream, false);
       if (info is null) {
@@ -42,17 +42,17 @@ public class PackageStore : IPackageStore {
       { // Store the manifest in a separate file too
         var nuspecPath = Path.Combine(packageDir, ".nuspec");
         File.Delete(nuspecPath);
-        await File.WriteAllTextAsync(nuspecPath, nuspec, Encoding.UTF8);
+        await File.WriteAllTextAsync(nuspecPath, nuspec, Encoding.UTF8, cancellationToken);
         this._logger.LogInformation("Stored manifest in {path}.", nuspecPath);
       }
       // FIXME: Should this also generate the JSON metadata or could/should that be left to a separate indexing services?
       // TODO: Construct a URI that points to the corresponding PackageDownload.DownloadPackageFile().
       return new CreatedResult("", null);
-    });
+    }, cancellationToken);
   }
 
   /// <inheritdoc />
-  public async Task<IActionResult> AddSymbolPackageAsync(IFormFile file) {
+  public async Task<IActionResult> AddSymbolPackageAsync(IFormFile file, CancellationToken cancellationToken) {
     return await this.WithTempFile<IActionResult>(file, async (tempFile, packageStream) => {
       var info = await this.GetPackageManifestInfo(packageStream, true);
       if (info is null) {
@@ -89,7 +89,19 @@ public class PackageStore : IPackageStore {
       }
       // TODO: Construct a URI that points to the corresponding PackageDownload.DownloadPackageFile().
       return new CreatedResult("", null);
-    });
+    }, cancellationToken);
+  }
+
+  /// <inheritdoc />
+  public bool DeletePackage(string id, string version) {
+    // FIXME: Should this perform any normalization on id and version?
+    var path = Path.Combine(this._packageFolder, id, version);
+    if (!Directory.Exists(path)) {
+      return false;
+    }
+    // TODO: Maybe determine whether any symbols are stored for this package, and delete those too.
+    Directory.Delete(path, true);
+    return true;
   }
 
   /// <inheritdoc />
@@ -109,6 +121,33 @@ public class PackageStore : IPackageStore {
     return File.OpenRead(path);
   }
 
+  /// <inheritdoc />
+  public bool RelistPackage(string id, string version) {
+    // FIXME: Should this perform any normalization on id and version?
+    var path = Path.Combine(this._packageFolder, id, version);
+    if (!Directory.Exists(path)) {
+      return false;
+    }
+    // FIXME: Is the lock file enough? Or should the "unlisted" status also be in the metadata?
+    File.Delete(Path.Combine(path, PackageStore.UnlistedPackageMarker));
+    return true;
+  }
+
+  /// <inheritdoc />
+  public bool UnlistPackage(string id, string version) {
+    // FIXME: Should this perform any normalization on id and version?
+    var path = Path.Combine(this._packageFolder, id, version);
+    if (!Directory.Exists(path)) {
+      return false;
+    }
+    var file = Path.Combine(path, PackageStore.UnlistedPackageMarker);
+    if (!File.Exists(file)) {
+      File.Create(file).Close();
+      File.SetCreationTime(file, DateTime.Now);
+    }
+    return true;
+  }
+
   #endregion
 
   #region Internals
@@ -118,6 +157,8 @@ public class PackageStore : IPackageStore {
 
   /// <summary>The extension used by symbol package files.</summary>
   private const string SymbolPackageExtension = ".snupkg";
+
+  private const string UnlistedPackageMarker = ".unlisted";
 
   private readonly ILogger<PackageStore> _logger;
 
@@ -334,13 +375,13 @@ public class PackageStore : IPackageStore {
     }
   }
 
-  private async Task<T> WithTempFile<T>(IFormFile file, Func<string, Stream, Task<T>> code) {
+  private async Task<T> WithTempFile<T>(IFormFile file, Func<string, Stream, Task<T>> code, CancellationToken cancellationToken) {
     var fileName = Path.Combine(this.TempFolder, Path.GetRandomFileName());
     this._logger.LogInformation("Temporarily storing uploaded file in {fileName}.", fileName);
     try {
       await using var stream = new FileStream(fileName, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None);
-      await file.CopyToAsync(stream);
-      await stream.FlushAsync();
+      await file.CopyToAsync(stream, cancellationToken);
+      await stream.FlushAsync(cancellationToken);
       stream.Position = 0;
       return await code(fileName, stream);
     }
