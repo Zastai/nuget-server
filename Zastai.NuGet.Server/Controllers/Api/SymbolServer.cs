@@ -1,6 +1,6 @@
-using System.Net;
-
 using Microsoft.AspNetCore.Mvc;
+
+using Zastai.NuGet.Server.Services;
 
 namespace Zastai.NuGet.Server.Controllers.Api;
 
@@ -14,8 +14,12 @@ public sealed class SymbolServer : ApiController<SymbolServer> {
 
   /// <summary>Creates a new symbol server controller.</summary>
   /// <param name="logger">A logger for the controller.</param>
-  public SymbolServer(ILogger<SymbolServer> logger) : base(logger) {
+  /// <param name="symbolStore">The symbol store to use.</param>
+  public SymbolServer(ILogger<SymbolServer> logger, ISymbolStore symbolStore) : base(logger) {
+    this._symbolStore = symbolStore;
   }
+
+  private readonly ISymbolStore _symbolStore;
 
   /// <summary>Retrieve (the contents of) a compressed PDB file.</summary>
   /// <remarks>
@@ -30,7 +34,7 @@ public sealed class SymbolServer : ApiController<SymbolServer> {
   /// <returns><c>404 - NOT FOUND</c></returns>
   /// <response code="404">Always.</response>
   [HttpGet("{name}.pdb/{signature}/{file}.pd_")]
-  [ProducesResponseType(typeof(void), (int) HttpStatusCode.NotFound)]
+  [ProducesResponseType(typeof(void), StatusCodes.Status404NotFound)]
   public NotFoundResult GetCompressedSymbolFile(string name, string signature, string file) {
     if (file != name) {
       this.Logger.LogWarning("Request with inconsistent symbol file name (\"{name}.pdb\" vs \"{file}.pd_\").", name, file);
@@ -50,14 +54,14 @@ public sealed class SymbolServer : ApiController<SymbolServer> {
   /// <response code="200">When the requested PDB file is being returned.</response>
   /// <response code="404">When the requested PDB file is not available.</response>
   [HttpGet("{name}.pdb/{signature}/{file}.pdb")]
-  [ProducesResponseType(typeof(IEnumerable<byte>), (int) HttpStatusCode.OK, SymbolServer.SymbolFileContentType)]
-  [ProducesResponseType(typeof(void), (int) HttpStatusCode.NotFound)]
+  [ProducesResponseType(typeof(IEnumerable<byte>), StatusCodes.Status200OK, SymbolServer.SymbolFileContentType)]
+  [ProducesResponseType(typeof(void), StatusCodes.Status404NotFound)]
   public IActionResult GetSymbolFile(string name, string signature, string file) {
     if (file != name) {
       this.Logger.LogWarning("Request with inconsistent symbol file name (\"{name}.pdb\" vs \"{file}.pdb\").", name, file);
       return this.NotFound();
     }
-    var pdb = SymbolStore.Open(name, signature);
+    var pdb = this._symbolStore.Open(name, signature);
     if (pdb is null) {
       this.Logger.LogWarning("Asked for symbols (PDB file) for {name} (signature: {signature}), but they were not available.", name,
                              signature);
@@ -77,7 +81,7 @@ public sealed class SymbolServer : ApiController<SymbolServer> {
   /// <returns><c>404 - NOT FOUND</c></returns>
   /// <response code="404">Always.</response>
   [HttpGet("{name}.pdb/{signature}/file.ptr")]
-  [ProducesResponseType(typeof(void), (int) HttpStatusCode.NotFound)]
+  [ProducesResponseType(typeof(void), StatusCodes.Status404NotFound)]
   public NotFoundResult GetSymbolPointer(string name, string signature) {
     this.Logger.LogWarning("Asked for pointer to symbols for {name} (signature: {signature}).", name, signature);
     return this.NotFound();
@@ -93,7 +97,7 @@ public sealed class SymbolServer : ApiController<SymbolServer> {
   /// <returns><c>404 - NOT FOUND</c></returns>
   /// <response code="404">Always.</response>
   [HttpGet("index2.txt")]
-  [ProducesResponseType(typeof(void), (int) HttpStatusCode.NotFound)]
+  [ProducesResponseType(typeof(void), StatusCodes.Status404NotFound)]
   public NotFoundResult NoTwoTierStructure() {
     this.Logger.LogInformation("Ignored request for index2.txt.");
     return this.NotFound();

@@ -1,8 +1,10 @@
 /.idea/
 /.vs/
 /.vscode/
+/test/
 bin/
 obj/
+data/
 msbuild.binlog
 msbuild.*.binlog
 *.*proj.user

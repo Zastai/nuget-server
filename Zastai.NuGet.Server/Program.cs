@@ -1,9 +1,16 @@
 using System.Reflection;
 
+using Zastai.NuGet.Server.Services;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddControllersWithViews();
+
+builder.Services.AddSingleton<ISettings, Settings>();
+
+builder.Services.AddSingleton<IPackageStore, PackageStore>();
+builder.Services.AddSingleton<ISymbolStore, SymbolStore>();
 
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();

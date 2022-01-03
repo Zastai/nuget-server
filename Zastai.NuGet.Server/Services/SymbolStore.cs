@@ -1,14 +1,88 @@
 ﻿using System.Reflection.Metadata;
 using System.Text;
 
-namespace Zastai.NuGet.Server;
+namespace Zastai.NuGet.Server.Services;
 
-/// <summary>Utilities for working with the symbols store.</summary>
-public static class SymbolStore {
+/// <summary>A symbol store.</summary>
+public class SymbolStore : ISymbolStore {
+
+  /// <summary>Creates a new symbol store.</summary>
+  /// <param name="logger">A logger for the symbol store.</param>
+  /// <param name="host">The host environment.</param>
+  public SymbolStore(ILogger<SymbolStore> logger, IHostEnvironment host) {
+    this._logger = logger;
+    this._symbolFolder = Path.Combine(host.ContentRootPath, "data", "symbols");
+    this._tempFolder = Path.Combine(host.ContentRootPath, "temp", "symbols");
+  }
+
+  #region ISymbolStore
+
+  /// <inheritdoc />
+  public async Task AddSymbolFileAsync(string name, Stream stream) {
+    // The stream is probably a DeflateStream from the nupkg - but those don't support positioning, and we need that.
+    // So, save it to a temp file first.
+    await this.WithTempFile(stream, async tempStream => {
+      var signature = this.GetSignature(tempStream);
+      var path = this.GetSymbolFilePath(name, signature);
+      this._logger.LogInformation("Adding symbol file: {pdb}.", path);
+      var dir = Path.GetDirectoryName(path);
+      if (dir is not null) {
+        Directory.CreateDirectory(dir);
+      }
+      await using var pdb = File.Open(path, FileMode.Create, FileAccess.Write, FileShare.None);
+      tempStream.Position = 0;
+      await tempStream.CopyToAsync(pdb);
+    });
+  }
+
+  /// <inheritdoc />
+  public string GetSignature(Stream stream) {
+    var startPosition = stream.Position;
+    // Assume Portable PDB format, for which the framework provides handling.
+    var guid = SymbolStore.GetPortableSignature(stream);
+    if (guid is null && stream.CanSeek) { // Otherwise, if we can rewind, try to handle it as a native PDB
+      stream.Position = startPosition;
+      guid = SymbolStore.GetNativeSignature(stream);
+    }
+    if (guid is null) {
+      throw new BadImageFormatException("Failed to extract the symbol file signature.");
+    }
+    return guid.Value.ToString("N").ToUpperInvariant() + "1";
+  }
+
+  /// <inheritdoc />
+  public string GetSignature(string path) {
+    using var fs = File.OpenRead(path);
+    return this.GetSignature(fs);
+  }
+
+  /// <inheritdoc />
+  public Stream? Open(string name, string signature) {
+    var path = this.GetSymbolFilePath(name, signature);
+    if (!File.Exists(path)) {
+      return null;
+    }
+    var actualSignature = this.GetSignature(path);
+    if (signature == actualSignature) {
+      return File.OpenRead(path);
+    }
+    var msg = $"Found a PDB file for signature '{signature}' but it has a different signature ('{actualSignature}').";
+    throw new InvalidOperationException(msg);
+  }
+
+  #endregion
+
+  #region Internals
 
   private static readonly byte[] NativePDBHeaderMagic = Encoding.ASCII.GetBytes("Microsoft C/C++ MSF 7.00\r\n\x001ADS\0\0\0");
 
   private static readonly byte[] NativePDBPageMagic = { 0x94, 0x2e, 0x31, 0x01 };
+
+  private readonly ILogger<SymbolStore> _logger;
+
+  private readonly string _symbolFolder;
+
+  private readonly string _tempFolder;
 
   private static Guid? GetNativeSignature(Stream stream) {
     {
@@ -99,54 +173,53 @@ public static class SymbolStore {
     }
   }
 
-  /// <summary>Gets the signature string for a (portable) PDB file.</summary>
-  /// <param name="stream">A stream containing the the PDB file to get the signature for.</param>
-  /// <returns>The PDB signature; this is the string that will be used by a symbol store client to request that PDB.</returns>
-  public static string GetSignature(Stream stream) {
-    var startPosition = stream.Position;
-    // Assume Portable PDB format, for which the framework provides handling.
-    var guid = SymbolStore.GetPortableSignature(stream);
-    if (guid is null && stream.CanSeek) { // Otherwise, if we can rewind, try to handle it as a native PDB
-      stream.Position = startPosition;
-      guid = SymbolStore.GetNativeSignature(stream);
-    }
-    if (guid is null) {
-      throw new BadImageFormatException("Failed to extract the symbol file signature.");
-    }
-    return guid.Value.ToString("N").ToUpperInvariant() + "1";
+  private string GetSymbolFileDirectory(string name) {
+    var dot = name.IndexOf('.');
+    return dot switch {
+      // System.Text.Json.pdb -> S\System\Text.Json
+      > 0 => Path.Combine(this.SymbolFolder, name[..1], name.Remove(dot), name[(dot + 1)..]),
+      // foo.pdb -> f\foo
+      _ => Path.Combine(this.SymbolFolder, name[..1], name)
+    };
   }
 
-  /// <summary>Gets the signature string for a (portable) PDB file.</summary>
-  /// <param name="path">The path the the PDB file to get the signature for.</param>
-  /// <returns>The PDB signature; this is the string that will be used by a symbol store client to request that PDB.</returns>
-  public static string GetSignature(string path) {
-    using var fs = File.OpenRead(path);
-    return SymbolStore.GetSignature(fs);
+  private string GetSymbolFilePath(string name, string signature)
+    => Path.Combine(this.GetSymbolFileDirectory(name), signature, name + ".pdb");
+
+  private string SymbolFolder {
+    get {
+      Directory.CreateDirectory(this._symbolFolder);
+      return this._symbolFolder;
+    }
   }
 
-  /// <summary>Attempts to open a symbol file (.pdb) with a particular signature.</summary>
-  /// <param name="name">The name of the requested symbol file (without extension).</param>
-  /// <param name="signature">The requested signature.</param>
-  /// <returns>A stream for reading the requested symbol file, or <see langword="null"/> if it is not available.</returns>
-  /// <exception cref="InvalidOperationException">
-  /// When the symbol file is found, but its signature does not match the requested signature.
-  /// </exception>
-  public static Stream? Open(string name, string signature) {
-    string? path = null;
-    // TODO: Compose actual path.
-    if (path is null) {
-      return null;
+  private string TempFolder {
+    get {
+      Directory.CreateDirectory(this._tempFolder);
+      return this._tempFolder;
     }
-    path = Path.Combine(path, name + ".pdb");
-    if (!File.Exists(path)) {
-      return null;
-    }
-    var actualSignature = SymbolStore.GetSignature(path);
-    if (signature == actualSignature) {
-      return File.OpenRead(path);
-    }
-    var msg = $"Found a PDB file for signature '{signature}' but it has a different signature ('{actualSignature}').";
-    throw new InvalidOperationException(msg);
   }
+
+  private async Task WithTempFile(Stream pdb, Func<Stream, Task> code) {
+    var fileName = Path.Combine(this.TempFolder, Path.GetRandomFileName());
+    this._logger.LogInformation("Temporarily storing symbol file in {fileName}.", fileName);
+    try {
+      await using var stream = new FileStream(fileName, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None);
+      await pdb.CopyToAsync(stream);
+      await stream.FlushAsync();
+      stream.Position = 0;
+      await code(stream);
+    }
+    finally {
+      try {
+        File.Delete(fileName);
+      }
+      catch (Exception e) {
+        this._logger.LogWarning("Unable to delete temporary file ({f}): {e}", fileName, e);
+      }
+    }
+  }
+
+  #endregion
 
 }
