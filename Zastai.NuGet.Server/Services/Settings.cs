@@ -12,12 +12,12 @@ public class Settings : ISettings {
   private readonly IConfiguration _configuration;
 
   /// <inheritdoc />
-  public bool IsDeleteAllowed => this._configuration.GetValue<bool>("NuGet:AllowDelete");
+  public bool IsDeleteAllowed => this._configuration.GetValue<bool>("NuGet:Settings:AllowDelete");
 
   /// <inheritdoc />
-  public bool IsRelistAllowed => this._configuration.GetValue<bool>("NuGet:AllowRelist");
+  public bool IsRelistAllowed => this._configuration.GetValue<bool>("NuGet:Settings:AllowRelist");
 
   /// <inheritdoc />
-  public bool IsUnlistAllowed => this._configuration.GetValue<bool>("NuGet:AllowUnlist");
+  public bool IsUnlistAllowed => this._configuration.GetValue<bool>("NuGet:Settings:AllowUnlist");
 
 }
