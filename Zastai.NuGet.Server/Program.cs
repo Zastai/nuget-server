@@ -9,8 +9,10 @@ builder.Services.AddControllersWithViews();
 
 builder.Services.AddSingleton<ISettings, Settings>();
 
+builder.Services.AddSingleton<IApiKeyStore, InMemoryApiKeyStore>();
 builder.Services.AddSingleton<IPackageStore, PackageStore>();
 builder.Services.AddSingleton<ISymbolStore, SymbolStore>();
+builder.Services.AddSingleton<IUserStore, InMemoryUserStore>();
 
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
