@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 
+using Zastai.NuGet.Server.Auth;
 using Zastai.NuGet.Server.Services;
 
 namespace Zastai.NuGet.Server.Controllers.Api;
@@ -30,7 +31,7 @@ public class PublishSymbols : ApiController<PublishSymbols> {
   /// <response code="413">When the package is too large.</response>
   /// <response code="415">When the request body is not a form containing exactly 1 file.</response>
   [HttpPut]
-  [RequireApiKey]
+  [RequireApiKey(Roles = NuGetRoles.CanPublishSymbols)]
   public async Task<IActionResult> PushAsync(CancellationToken cancellationToken) {
     if (!this.Request.HasFormContentType) {
       return this.StatusCode(StatusCodes.Status415UnsupportedMediaType);

@@ -1,5 +1,6 @@
 using System.Reflection;
 
+using Zastai.NuGet.Server.Auth;
 using Zastai.NuGet.Server.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -13,6 +14,12 @@ builder.Services.AddSingleton<IApiKeyStore, InMemoryApiKeyStore>();
 builder.Services.AddSingleton<IPackageStore, PackageStore>();
 builder.Services.AddSingleton<ISymbolStore, SymbolStore>();
 builder.Services.AddSingleton<IUserStore, InMemoryUserStore>();
+
+// Enable API key support
+builder.Services.AddAuthentication(options => {
+  options.DefaultAuthenticateScheme = ApiKeySupport.Scheme;
+  options.DefaultChallengeScheme = ApiKeySupport.Scheme;
+}).AddApiKeySupport();
 
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
