@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 
+using Zastai.NuGet.Server.Auth;
 using Zastai.NuGet.Server.Services;
 
 namespace Zastai.NuGet.Server.Controllers.Api;
@@ -32,7 +33,7 @@ public class PublishPackage : ApiController<PublishPackage> {
   /// <response code="401">When the user is not authorized to delete/unlist a package.</response>
   /// <response code="404">When no matching package was found.</response>
   [HttpDelete(PublishPackage.ActionPath)]
-  [RequireApiKey]
+  [RequireApiKey(Roles = NuGetRoles.CanDeletePackages)]
   public IActionResult DeleteOrUnlist(string id, string version) {
     if (this._settings.IsDeleteAllowed) {
       return this._packageStore.DeletePackage(id, version) ? this.NoContent() : this.NotFound();
@@ -52,7 +53,7 @@ public class PublishPackage : ApiController<PublishPackage> {
   /// <response code="409">When the package already exists.</response>
   /// <response code="415">When the request body is not a form containing exactly 1 file.</response>
   [HttpPut]
-  [RequireApiKey]
+  [RequireApiKey(Roles = NuGetRoles.CanPublishPackages)]
   public async Task<IActionResult> PushAsync(CancellationToken cancellationToken) {
     if (!this.Request.HasFormContentType) {
       return this.StatusCode(StatusCodes.Status415UnsupportedMediaType);
@@ -71,7 +72,7 @@ public class PublishPackage : ApiController<PublishPackage> {
   /// <response code="401">When the user is not authorized to delete/unlist a package.</response>
   /// <response code="404">When no matching package was found.</response>
   [HttpPost(PublishPackage.ActionPath)]
-  [RequireApiKey]
+  [RequireApiKey(Roles = NuGetRoles.CanDeletePackages)]
   public IActionResult Relist(string id, string version) {
     if (!this._settings.IsRelistAllowed) {
       return this.Unauthorized();
