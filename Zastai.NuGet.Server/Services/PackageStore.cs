@@ -24,13 +24,14 @@ public class PackageStore : IPackageStore {
   #region IPackageStore
 
   /// <inheritdoc />
-  public async Task<IActionResult> AddPackageAsync(IFormFile file, CancellationToken cancellationToken) {
+  public async Task<IActionResult> AddPackageAsync(IFormFile file, string owner, CancellationToken cancellationToken) {
     return await this.WithTempFile<IActionResult>(file, async (tempFile, packageStream) => {
       var info = await this.GetPackageManifestInfo(packageStream, false);
       if (info is null) {
         return new BadRequestResult();
       }
       var (id, version, nuspec) = info.Value;
+      // TODO: Maybe validate the owner?
       var packageDir = Path.Combine(this.PackageFolder, id, version);
       // FIXME: Or should this check for the package file and/or nuspec?
       if (Directory.Exists(packageDir)) {
@@ -45,6 +46,27 @@ public class PackageStore : IPackageStore {
         await File.WriteAllTextAsync(nuspecPath, nuspec, Encoding.UTF8, cancellationToken);
         this._logger.LogInformation("Stored manifest in {path}.", nuspecPath);
       }
+      {
+        var metadataPath = Path.Combine(packageDir, ".metadata");
+        File.Delete(metadataPath);
+        var doc = new XmlDocument();
+        // FIXME: Using a namespace (e.g. urn:nuget:server:package-metadata:1.0) would be better, but also makes working with the
+        // FIXME: document more involved.
+        var root = doc.CreateElement("package-metadata");
+        {
+          var packageOwner = doc.CreateElement("owner");
+          packageOwner.InnerText = owner;
+          root.AppendChild(packageOwner);
+        }
+        {
+          var timestamp = doc.CreateElement("uploaded");
+          timestamp.InnerText = DateTimeOffset.UtcNow.ToString("O");
+          root.AppendChild(timestamp);
+        }
+        doc.AppendChild(root);
+        doc.Save(metadataPath);
+        this._logger.LogInformation("Stored metadata in {path}.", metadataPath);
+      }
       // FIXME: Should this also generate the JSON metadata or could/should that be left to a separate indexing services?
       // TODO: Construct a URI that points to the corresponding PackageDownload.DownloadPackageFile().
       return new CreatedResult("", null);
@@ -52,7 +74,7 @@ public class PackageStore : IPackageStore {
   }
 
   /// <inheritdoc />
-  public async Task<IActionResult> AddSymbolPackageAsync(IFormFile file, CancellationToken cancellationToken) {
+  public async Task<IActionResult> AddSymbolPackageAsync(IFormFile file, string owner, CancellationToken cancellationToken) {
     return await this.WithTempFile<IActionResult>(file, async (tempFile, packageStream) => {
       var info = await this.GetPackageManifestInfo(packageStream, true);
       if (info is null) {
@@ -67,6 +89,44 @@ public class PackageStore : IPackageStore {
       var packagePath = this.StorePackageFile(tempFile, packageDir, id, version, PackageStore.SymbolPackageExtension);
       if (packagePath is null) {
         return new ConflictResult();
+      }
+      {
+        var metadataPath = Path.Combine(packageDir, ".metadata");
+        if (!File.Exists(metadataPath)) {
+          this._logger.LogError("No metadata found for package {id} {version}.", id, version);
+          return new ConflictResult();
+        }
+        XmlDocument doc;
+        try {
+          doc = new XmlDocument();
+          doc.Load(metadataPath);
+          if (doc.DocumentElement is null) {
+            throw new XmlException("No root element found.");
+          }
+          if (doc.DocumentElement.LocalName != "package-metadata" || doc.DocumentElement.NamespaceURI != "") {
+            throw new XmlException("Incorrect root element.");
+          }
+        }
+        catch (Exception e) {
+          this._logger.LogError("Invalid metadata found for package {id} {version}: {e}.", id, version, e);
+          return new ConflictResult();
+        }
+        var root = doc.DocumentElement;
+        {
+          var storedOwner = root.SelectSingleNode("./owner");
+          if (storedOwner is null || storedOwner.InnerText != owner) {
+            this._logger.LogError("Adding symbols for package {id} {version} as '{owner}', but package owner is '{storedOwner}'.",
+                                  id, version, owner, storedOwner?.InnerText);
+            return new UnauthorizedResult();
+          }
+        }
+        {
+          var timestamp = doc.CreateElement("symbols-uploaded");
+          timestamp.InnerText = DateTimeOffset.UtcNow.ToString("O");
+          doc.DocumentElement.AppendChild(timestamp);
+        }
+        doc.Save(metadataPath);
+        this._logger.LogInformation("Updated metadata in {path}.", metadataPath);
       }
       try {
         await using var stream = new FileStream(packagePath, FileMode.Open, FileAccess.Read, FileShare.None);
@@ -322,6 +382,35 @@ public class PackageStore : IPackageStore {
       this._logger.LogWarning("Failed to get manifest information from package: {e}", e);
       return null;
     }
+  }
+
+  /// <inheritdoc />
+  public string? GetPackageOwner(string id, string version) {
+    var packageDir = Path.Combine(this.PackageFolder, id, version);
+    if (!Directory.Exists(packageDir)) {
+      return null;
+    }
+    var metadataPath = Path.Combine(packageDir, ".metadata");
+    if (!File.Exists(metadataPath)) {
+      this._logger.LogError("No metadata found for package {id} {version}.", id, version);
+      return null;
+    }
+    XmlDocument doc;
+    try {
+      doc = new XmlDocument();
+      doc.Load(metadataPath);
+      if (doc.DocumentElement is null) {
+        throw new XmlException("No root element found.");
+      }
+      if (doc.DocumentElement.LocalName != "package-metadata" || doc.DocumentElement.NamespaceURI != "") {
+        throw new XmlException("Incorrect root element.");
+      }
+    }
+    catch (Exception e) {
+      this._logger.LogError("Invalid metadata found for package {id} {version}: {e}.", id, version, e);
+      return null;
+    }
+    return doc.DocumentElement.SelectSingleNode("./owner")?.InnerText;
   }
 
   private string? NormalizePackageId(string id) {

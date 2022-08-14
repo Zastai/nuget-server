@@ -1,4 +1,7 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using System.Diagnostics.CodeAnalysis;
+using System.Security.Claims;
+
+using Microsoft.AspNetCore.Mvc;
 
 using Zastai.NuGet.Server.Auth;
 using Zastai.NuGet.Server.Services;
@@ -35,12 +38,16 @@ public class PublishPackage : ApiController<PublishPackage> {
   [HttpDelete(PublishPackage.ActionPath)]
   [RequireApiKey(Roles = NuGetRoles.CanDeletePackages)]
   public IActionResult DeleteOrUnlist(string id, string version) {
+    if (!this.UserIsPackageOwner(id, version, out var result)) {
+      return result;
+    }
     if (this._settings.IsDeleteAllowed) {
       return this._packageStore.DeletePackage(id, version) ? this.NoContent() : this.NotFound();
     }
     if (this._settings.IsUnlistAllowed) {
       return this._packageStore.UnlistPackage(id, version) ? this.NoContent() : this.NotFound();
     }
+    this.Logger.LogError("Delete or unlist requested, but neither is allowed by configuration.");
     return this.Unauthorized();
   }
 
@@ -62,7 +69,12 @@ public class PublishPackage : ApiController<PublishPackage> {
     if (form.Files.Count != 1) {
       return this.StatusCode(StatusCodes.Status415UnsupportedMediaType, "Exactly one file should be provided.");
     }
-    return await this._packageStore.AddPackageAsync(form.Files[0], cancellationToken);
+    var user = this.User.Claims.FirstOrDefault(claim => claim.Type == ClaimTypes.Actor)?.Value;
+    if (user is not null) {
+      return await this._packageStore.AddPackageAsync(form.Files[0], user, cancellationToken);
+    }
+    this.Logger.LogError("Could not determine the ID of the user pushing the package.");
+    return this.Unauthorized();
   }
 
   /// <summary>Relists a package that was previously unlisted.</summary>
@@ -74,10 +86,35 @@ public class PublishPackage : ApiController<PublishPackage> {
   [HttpPost(PublishPackage.ActionPath)]
   [RequireApiKey(Roles = NuGetRoles.CanDeletePackages)]
   public IActionResult Relist(string id, string version) {
-    if (!this._settings.IsRelistAllowed) {
-      return this.Unauthorized();
+    if (!this.UserIsPackageOwner(id, version, out var result)) {
+      return result;
     }
-    return this._packageStore.RelistPackage(id, version) ? this.Ok() : this.NotFound();
+    if (this._settings.IsRelistAllowed) {
+      return this._packageStore.RelistPackage(id, version) ? this.Ok() : this.NotFound();
+    }
+    this.Logger.LogError("Relist requested, but not allowed by configuration.");
+    return this.Unauthorized();
+  }
+
+  private bool UserIsPackageOwner(string id, string version, [NotNullWhen(false)] out IActionResult? result) {
+    var user = this.User.Claims.FirstOrDefault(claim => claim.Type == ClaimTypes.Actor)?.Value;
+    if (user is not null) {
+      var owner = this._packageStore.GetPackageOwner(id, version);
+      if (owner is null) {
+        result = this.NotFound();
+        return false;
+      }
+      if (owner == user) {
+        result = null;
+        return true;
+      }
+      this.Logger.LogError("The user making the request ({u}) is not the package owner ({o}).", user, owner);
+    }
+    else {
+      this.Logger.LogError("Could not determine the ID of the user requesting the package unlist.");
+    }
+    result = this.Unauthorized();
+    return false;
   }
 
   #region NuGet Service Info
