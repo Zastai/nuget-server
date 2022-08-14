@@ -7,21 +7,29 @@ public interface IPackageStore {
 
   /// <summary>Adds a package to the store.</summary>
   /// <param name="file">The package file.</param>
+  /// <param name="owner">The ID of the user adding the package.</param>
   /// <param name="cancellationToken">The cancellation token to cancel the operation.</param>
   /// <returns>The result of the operation.</returns>
-  public Task<IActionResult> AddPackageAsync(IFormFile file, CancellationToken cancellationToken = new());
+  public Task<IActionResult> AddPackageAsync(IFormFile file, string owner, CancellationToken cancellationToken = new());
 
   /// <summary>Adds a symbol package to the store.</summary>
   /// <param name="file">The symbol package file.</param>
+  /// <param name="owner">The ID of the user adding the package.</param>
   /// <param name="cancellationToken">The cancellation token to cancel the operation.</param>
   /// <returns>The result of the operation.</returns>
-  public Task<IActionResult> AddSymbolPackageAsync(IFormFile file, CancellationToken cancellationToken = new());
+  public Task<IActionResult> AddSymbolPackageAsync(IFormFile file, string owner, CancellationToken cancellationToken = new());
 
   /// <summary>Deletes the specified package.</summary>
   /// <param name="id">The package ID.</param>
   /// <param name="version">The package version.</param>
   /// <returns><see langword="false"/> if the package did not exist; <see langword="true"/> otherwise.</returns>
   public bool DeletePackage(string id, string version);
+
+  /// <summary>Retrieves the owner of the package.</summary>
+  /// <param name="id">The package ID.</param>
+  /// <param name="version">The package version.</param>
+  /// <returns>The ID of the user who added the package; <see langword="null"/> if the package did not exist.</returns>
+  public string? GetPackageOwner(string id, string version);
 
   /// <summary>Determines whether or not a give file is allowed to be downloaded.</summary>
   /// <param name="file">The file for which download is requested.</param>

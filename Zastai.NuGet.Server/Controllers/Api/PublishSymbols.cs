@@ -1,4 +1,6 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using System.Security.Claims;
+
+using Microsoft.AspNetCore.Mvc;
 
 using Zastai.NuGet.Server.Auth;
 using Zastai.NuGet.Server.Services;
@@ -40,7 +42,12 @@ public class PublishSymbols : ApiController<PublishSymbols> {
     if (form.Files.Count != 1) {
       return this.StatusCode(StatusCodes.Status415UnsupportedMediaType, "Exactly one file should be provided.");
     }
-    return await this._packageStore.AddSymbolPackageAsync(form.Files[0], cancellationToken);
+    var user = this.User.Claims.FirstOrDefault(claim => claim.Type == ClaimTypes.Actor)?.Value;
+    if (user is not null) {
+      return await this._packageStore.AddSymbolPackageAsync(form.Files[0], user, cancellationToken);
+    }
+    this.Logger.LogError("Could not determine the ID of the user pushing the symbols package.");
+    return this.Unauthorized();
   }
 
   #region NuGet Service Info
