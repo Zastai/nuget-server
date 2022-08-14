@@ -8,10 +8,18 @@ public class RepositorySignatures : ApiController<RepositorySignatures> {
 
   private const string BasePath = "repository-signatures";
 
+  private const string ActionPath = "index.json";
+
   /// <summary>Creates a new repository signatures service controller.</summary>
   /// <param name="logger">A logger for the controller.</param>
   public RepositorySignatures(ILogger<RepositorySignatures> logger) : base(logger) {
   }
+
+  /// <summary>Gets the repository signatures.</summary>
+  /// <returns>The repository signatures.</returns>
+  /// <response code="200">Always.</response>
+  [HttpGet(RepositorySignatures.ActionPath)]
+  public Documents.RepositorySignatures Index() => new();
 
   #region NuGet Service Info
 
@@ -24,8 +32,8 @@ public class RepositorySignatures : ApiController<RepositorySignatures> {
   };
 
   /// <summary>NuGet service information for the repository signatures service.</summary>
-  public static readonly NuGetService Service = new(RepositorySignatures.BasePath, RepositorySignatures.Types,
-                                                    RepositorySignatures.Description);
+  public static readonly NuGetService Service = new(RepositorySignatures.BasePath + '/' + RepositorySignatures.ActionPath,
+                                                    RepositorySignatures.Types, RepositorySignatures.Description);
 
   #endregion
 
