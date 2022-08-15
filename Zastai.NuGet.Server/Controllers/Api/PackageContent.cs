@@ -25,8 +25,8 @@ public class PackageContent : ApiController<PackageContent> {
   /// <summary>Enumerates the versions available for a package.</summary>
   /// <param name="id">The package ID.</param>
   /// <returns>The versions available for a package.</returns>
-  /// <response code="200">When the package was found.</response>
-  /// <response code="404">When the package was not found.</response>
+  /// <response code="200">When the package was found and has available versions.</response>
+  /// <response code="404">When the package was not found or does not have any available versions.</response>
   [HttpGet("{id}/index.json")]
   [ProducesResponseType(typeof(PackageVersions), StatusCodes.Status200OK)]
   [ProducesResponseType(typeof(void), StatusCodes.Status404NotFound)]
