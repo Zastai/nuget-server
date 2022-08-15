@@ -413,6 +413,19 @@ public class PackageStore : IPackageStore {
     return doc.DocumentElement.SelectSingleNode("./owner")?.InnerText;
   }
 
+  /// <inheritdoc />
+  public IReadOnlyList<string> GetPackageVersions(string id) {
+    var packageDir = Path.Combine(this.PackageFolder, id);
+    if (!Directory.Exists(packageDir)) {
+      return Array.Empty<string>();
+    }
+    // TODO: Validate version-ness, or just filter out any specific technical directories that might be known to exist.
+    return Directory.EnumerateDirectories(packageDir, "*.*", SearchOption.TopDirectoryOnly)
+                    .Select(dir => Path.GetFileName(dir) ?? "")
+                    .Where(dir => dir.Length > 0)
+                    .ToList();
+  }
+
   private string? NormalizePackageId(string id) {
     // TODO: More validation, maybe using a regex
     // FIXME: Or should this validation be included in a NormalizePackageId method?

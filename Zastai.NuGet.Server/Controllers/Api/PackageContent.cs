@@ -1,25 +1,42 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 
+using Zastai.NuGet.Server.Controllers.Documents;
 using Zastai.NuGet.Server.Services;
 
 namespace Zastai.NuGet.Server.Controllers.Api;
 
-/// <summary>A package download service.</summary>
-[Route(PackageDownload.BasePath)]
-public class PackageDownload : ApiController<PackageDownload> {
+/// <summary>A package content service.</summary>
+[Route(PackageContent.BasePath)]
+public class PackageContent : ApiController<PackageContent> {
 
   private const string BasePath = "packages/content";
 
   private const string PackageContentType = "application/octet-stream";
 
+  private readonly IPackageStore _packageStore;
+
   /// <summary>Creates a new package download service controller.</summary>
   /// <param name="logger">A logger for the controller.</param>
   /// <param name="packageStore">The package store to use.</param>
-  public PackageDownload(ILogger<PackageDownload> logger, IPackageStore packageStore) : base(logger) {
+  public PackageContent(ILogger<PackageContent> logger, IPackageStore packageStore) : base(logger) {
     this._packageStore = packageStore;
   }
 
-  private readonly IPackageStore _packageStore;
+  /// <summary>Enumerates the versions available for a package.</summary>
+  /// <param name="id">The package ID.</param>
+  /// <returns>The versions available for a package.</returns>
+  /// <response code="200">When the package was found.</response>
+  /// <response code="404">When the package was not found.</response>
+  [HttpGet("{id}/index.json")]
+  [ProducesResponseType(typeof(PackageVersions), StatusCodes.Status200OK)]
+  [ProducesResponseType(typeof(void), StatusCodes.Status404NotFound)]
+  public IActionResult EnumerateVersions(string id) {
+    var versions = this._packageStore.GetPackageVersions(id);
+    if (versions.Count == 0) {
+      return this.NotFound();
+    }
+    return this.Json(new PackageVersions(versions));
+  }
 
   /// <summary>Retrieve a package.</summary>
   /// <param name="id">The package ID.</param>
@@ -29,7 +46,7 @@ public class PackageDownload : ApiController<PackageDownload> {
   /// <response code="200">When the requested package is being returned.</response>
   /// <response code="404">When the requested package is not available.</response>
   [HttpGet("{id}/{version}/{file}")]
-  [ProducesResponseType(typeof(IEnumerable<byte>), StatusCodes.Status200OK, PackageDownload.PackageContentType)]
+  [ProducesResponseType(typeof(IEnumerable<byte>), StatusCodes.Status200OK, PackageContent.PackageContentType)]
   [ProducesResponseType(typeof(void), StatusCodes.Status404NotFound)]
   public IActionResult DownloadPackageFile(string id, string version, string file) {
     // FIXME: Or should this validation be in PackageStore?
@@ -46,7 +63,7 @@ public class PackageDownload : ApiController<PackageDownload> {
       return this.NotFound();
     }
     this.Logger.LogInformation("Returning a file from package {id} {version} ({file}).", id, version, file);
-    return this.File(package, PackageDownload.PackageContentType, file);
+    return this.File(package, PackageContent.PackageContentType, file);
   }
 
   #region NuGet Service Info
@@ -58,7 +75,7 @@ public class PackageDownload : ApiController<PackageDownload> {
   };
 
   /// <summary>NuGet service information for the package download service.</summary>
-  public static readonly NuGetService Service = new(PackageDownload.BasePath, PackageDownload.Types, PackageDownload.Description);
+  public static readonly NuGetService Service = new(PackageContent.BasePath, PackageContent.Types, PackageContent.Description);
 
   #endregion
 

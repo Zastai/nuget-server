@@ -29,7 +29,7 @@ public sealed class ServiceIndex {
     var resources = new List<ServiceIndexResource>();
     ServiceIndex.Add(resources, baseUri, Autocomplete.Service);
     ServiceIndex.Add(resources, baseUri, Catalog.Service);
-    ServiceIndex.Add(resources, baseUri, PackageDownload.Service);
+    ServiceIndex.Add(resources, baseUri, PackageContent.Service);
     ServiceIndex.Add(resources, baseUri, PackageDetails.Service);
     ServiceIndex.Add(resources, baseUri, PackageMetadata.Service);
     ServiceIndex.Add(resources, baseUri, PublishPackage.Service);

@@ -31,6 +31,11 @@ public interface IPackageStore {
   /// <returns>The ID of the user who added the package; <see langword="null"/> if the package did not exist.</returns>
   public string? GetPackageOwner(string id, string version);
 
+  /// <summary>Retrieves the available versions for a package.</summary>
+  /// <param name="id">The package ID.</param>
+  /// <returns>The versions available for the package.</returns>
+  public IReadOnlyList<string> GetPackageVersions(string id);
+
   /// <summary>Determines whether or not a give file is allowed to be downloaded.</summary>
   /// <param name="file">The file for which download is requested.</param>
   /// <returns>
