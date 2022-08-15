@@ -1,11 +1,14 @@
 using Microsoft.AspNetCore.Mvc;
 
+using Zastai.NuGet.Server.Services;
+
 namespace Zastai.NuGet.Server.Controllers.Api;
 
 /// <summary>An API controller, with a dedicated logger and a default route for logging purposes.</summary>
 /// <typeparam name="T">The specific type of controller.</typeparam>
 [ApiController]
 [Produces("application/json")]
+[ServiceFilter(typeof(RequestLoggingFilter))]
 public abstract class ApiController<T> : Controller where T : ApiController<T> {
 
   /// <summary>Creates a new API controller.</summary>

@@ -1,11 +1,14 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 
+using Zastai.NuGet.Server.Services;
+
 namespace Zastai.NuGet.Server.Controllers.UI;
 
 /// <summary>A UI (view) controller, with a dedicated logger and a default route for logging purposes.</summary>
 /// <typeparam name="T">The specific type of controller.</typeparam>
 [ApiExplorerSettings(IgnoreApi = true)]
 [Produces("text/html")]
+[ServiceFilter(typeof(RequestLoggingFilter))]
 public abstract class UIController<T> : Controller where T : UIController<T> {
 
   /// <summary>Creates a new UI controller.</summary>
