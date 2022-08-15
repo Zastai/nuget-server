@@ -25,6 +25,15 @@ public interface IPackageStore {
   /// <returns><see langword="false"/> if the package did not exist; <see langword="true"/> otherwise.</returns>
   public bool DeletePackage(string id, string version);
 
+  /// <summary>Attempts to return a file related to a NuGet package.</summary>
+  /// <param name="id">The requested package ID.</param>
+  /// <param name="version">The requested package version.</param>
+  /// <param name="file">
+  /// The file to open. This must be a suitable file name related to <paramref name="id"/> and <paramref name="version"/>.
+  /// </param>
+  /// <returns>The requested file as a <see cref="FileResult"/>, if available; otherwise, a <see cref="NotFoundResult"/>.</returns>
+  public IActionResult GetFile(string id, string version, string file);
+
   /// <summary>Retrieves the owner of the package.</summary>
   /// <param name="id">The package ID.</param>
   /// <param name="version">The package version.</param>
@@ -35,20 +44,6 @@ public interface IPackageStore {
   /// <param name="id">The package ID.</param>
   /// <returns>The versions available for the package.</returns>
   public IReadOnlyList<string> GetPackageVersions(string id);
-
-  /// <summary>Determines whether or not a give file is allowed to be downloaded.</summary>
-  /// <param name="file">The file for which download is requested.</param>
-  /// <returns>
-  /// <see langword="true"/> when <paramref name="file"/> is allowed for download; <see langword="false"/> otherwise.
-  /// </returns>
-  public bool IsDownloadableFile(string file);
-
-  /// <summary>Attempts to open a NuGet package file.</summary>
-  /// <param name="id">The requested package ID.</param>
-  /// <param name="version">The requested package version.</param>
-  /// <param name="file">The file to open. This must be a <c>.nupkg</c> or <c>.snupkg</c> file.</param>
-  /// <returns>A stream for reading the requested package, or <see langword="null"/> if it is not available.</returns>
-  public Stream? Open(string id, string version, string file);
 
   /// <summary>Relists the specified package (if it was previously unlisted).</summary>
   /// <param name="id">The package ID.</param>

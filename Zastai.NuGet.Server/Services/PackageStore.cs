@@ -37,11 +37,11 @@ public class PackageStore : IPackageStore {
       if (Directory.Exists(packageDir)) {
         return new ConflictResult();
       }
-      if (this.StorePackageFile(tempFile, packageDir, id, version, PackageStore.PackageExtension) is null) {
+      if (this.StorePackageFile(tempFile, packageDir, id, version, Constants.PackageExtension) is null) {
         return new ConflictResult();
       }
       { // Store the manifest in a separate file too
-        var nuspecPath = Path.Combine(packageDir, ".nuspec");
+        var nuspecPath = Path.Combine(packageDir, Constants.SpecExtension);
         File.Delete(nuspecPath);
         await File.WriteAllTextAsync(nuspecPath, nuspec, Encoding.UTF8, cancellationToken);
         this._logger.LogInformation("Stored manifest in {path}.", nuspecPath);
@@ -67,8 +67,7 @@ public class PackageStore : IPackageStore {
         doc.Save(metadataPath);
         this._logger.LogInformation("Stored metadata in {path}.", metadataPath);
       }
-      // FIXME: Should this also generate the JSON metadata or could/should that be left to a separate indexing services?
-      // TODO: Construct a URI that points to the corresponding PackageDownload.DownloadPackageFile().
+      // TODO: Construct a URI that points to the corresponding PackageContent.DownloadPackageFile().
       return new CreatedResult("", null);
     }, cancellationToken);
   }
@@ -86,7 +85,7 @@ public class PackageStore : IPackageStore {
       if (!Directory.Exists(packageDir)) {
         return new NotFoundResult();
       }
-      var packagePath = this.StorePackageFile(tempFile, packageDir, id, version, PackageStore.SymbolPackageExtension);
+      var packagePath = this.StorePackageFile(tempFile, packageDir, id, version, Constants.SymbolsExtension);
       if (packagePath is null) {
         return new ConflictResult();
       }
@@ -147,7 +146,7 @@ public class PackageStore : IPackageStore {
       catch (Exception e) {
         this._logger.LogError("Failed to process PDB files in package: {e}", e);
       }
-      // TODO: Construct a URI that points to the corresponding PackageDownload.DownloadPackageFile().
+      // TODO: Construct a URI that points to the corresponding PackageContent.DownloadPackageFile().
       return new CreatedResult("", null);
     }, cancellationToken);
   }
@@ -165,20 +164,81 @@ public class PackageStore : IPackageStore {
   }
 
   /// <inheritdoc />
-  public bool IsDownloadableFile(string file) {
-    // Only allow packages to be downloaded
-    return file.EndsWith(PackageStore.PackageExtension) || file.EndsWith(PackageStore.SymbolPackageExtension);
+  public IActionResult GetFile(string id, string version, string file) {
+    string contentType;
+    string path;
+    // Check for the 3 valid file names.
+    if (file == $"{id}.{version}{Constants.PackageExtension}") {
+      contentType = Constants.PackageContentType;
+      path = Path.Combine(this._packageFolder, id, version, file);
+    }
+    else if (file == $"{id}.{version}{Constants.SymbolsExtension}") {
+      contentType = Constants.SymbolsContentType;
+      path = Path.Combine(this._packageFolder, id, version, file);
+    }
+    else if (file == $"{id}{Constants.SpecExtension}") {
+      contentType = Constants.SpecContentType;
+      // This remaps to the .nuspec file we extract during a push operation.
+      path = Path.Combine(this._packageFolder, id, version, Constants.SpecExtension);
+    }
+    else {
+      this._logger.LogWarning("Asked for an unsupported file ({file}) from package {id} {version}.", file, id, version);
+      return new NotFoundResult();
+    }
+    this._logger.LogTrace("File {file} for package {id} {version} maps to {path} ({contentType}).", file, id, version, path,
+                          contentType);
+    if (!File.Exists(path)) {
+      this._logger.LogWarning("Asked for file {file} from package {id} {version}, but it is not available.", file, id, version);
+      return new NotFoundResult();
+    }
+    // FIXME: Any further validation wanted?
+    this._logger.LogTrace("Returning file {file} from package {id} {version}.", file, id, version);
+    return new FileStreamResult(File.OpenRead(path), contentType) {
+      FileDownloadName = file,
+      LastModified = File.GetLastWriteTime(path),
+    };
   }
 
   /// <inheritdoc />
-  public Stream? Open(string id, string version, string file) {
-    // FIXME: Should this perform any normalization on id and version?
-    var path = Path.Combine(this._packageFolder, id, version, file);
-    if (!File.Exists(path)) {
+  public string? GetPackageOwner(string id, string version) {
+    var packageDir = Path.Combine(this.PackageFolder, id, version);
+    if (!Directory.Exists(packageDir)) {
       return null;
     }
-    // FIXME: Any further validation wanted?
-    return File.OpenRead(path);
+    var metadataPath = Path.Combine(packageDir, ".metadata");
+    if (!File.Exists(metadataPath)) {
+      this._logger.LogError("No metadata found for package {id} {version}.", id, version);
+      return null;
+    }
+    XmlDocument doc;
+    try {
+      doc = new XmlDocument();
+      doc.Load(metadataPath);
+      if (doc.DocumentElement is null) {
+        throw new XmlException("No root element found.");
+      }
+      if (doc.DocumentElement.LocalName != "package-metadata" || doc.DocumentElement.NamespaceURI != "") {
+        throw new XmlException("Incorrect root element.");
+      }
+    }
+    catch (Exception e) {
+      this._logger.LogError("Invalid metadata found for package {id} {version}: {e}.", id, version, e);
+      return null;
+    }
+    return doc.DocumentElement.SelectSingleNode("./owner")?.InnerText;
+  }
+
+  /// <inheritdoc />
+  public IReadOnlyList<string> GetPackageVersions(string id) {
+    var packageDir = Path.Combine(this.PackageFolder, id);
+    if (!Directory.Exists(packageDir)) {
+      return Array.Empty<string>();
+    }
+    // TODO: Validate version-ness, or just filter out any specific technical directories that might be known to exist.
+    return Directory.EnumerateDirectories(packageDir, "*.*", SearchOption.TopDirectoryOnly)
+                    .Select(dir => Path.GetFileName(dir) ?? "")
+                    .Where(dir => dir.Length > 0)
+                    .ToList();
   }
 
   /// <inheritdoc />
@@ -211,12 +271,6 @@ public class PackageStore : IPackageStore {
   #endregion
 
   #region Internals
-
-  /// <summary>The extension used by package files.</summary>
-  private const string PackageExtension = ".nupkg";
-
-  /// <summary>The extension used by symbol package files.</summary>
-  private const string SymbolPackageExtension = ".snupkg";
 
   private const string UnlistedPackageMarker = ".unlisted";
 
@@ -384,48 +438,6 @@ public class PackageStore : IPackageStore {
     }
   }
 
-  /// <inheritdoc />
-  public string? GetPackageOwner(string id, string version) {
-    var packageDir = Path.Combine(this.PackageFolder, id, version);
-    if (!Directory.Exists(packageDir)) {
-      return null;
-    }
-    var metadataPath = Path.Combine(packageDir, ".metadata");
-    if (!File.Exists(metadataPath)) {
-      this._logger.LogError("No metadata found for package {id} {version}.", id, version);
-      return null;
-    }
-    XmlDocument doc;
-    try {
-      doc = new XmlDocument();
-      doc.Load(metadataPath);
-      if (doc.DocumentElement is null) {
-        throw new XmlException("No root element found.");
-      }
-      if (doc.DocumentElement.LocalName != "package-metadata" || doc.DocumentElement.NamespaceURI != "") {
-        throw new XmlException("Incorrect root element.");
-      }
-    }
-    catch (Exception e) {
-      this._logger.LogError("Invalid metadata found for package {id} {version}: {e}.", id, version, e);
-      return null;
-    }
-    return doc.DocumentElement.SelectSingleNode("./owner")?.InnerText;
-  }
-
-  /// <inheritdoc />
-  public IReadOnlyList<string> GetPackageVersions(string id) {
-    var packageDir = Path.Combine(this.PackageFolder, id);
-    if (!Directory.Exists(packageDir)) {
-      return Array.Empty<string>();
-    }
-    // TODO: Validate version-ness, or just filter out any specific technical directories that might be known to exist.
-    return Directory.EnumerateDirectories(packageDir, "*.*", SearchOption.TopDirectoryOnly)
-                    .Select(dir => Path.GetFileName(dir) ?? "")
-                    .Where(dir => dir.Length > 0)
-                    .ToList();
-  }
-
   private string? NormalizePackageId(string id) {
     // TODO: More validation, maybe using a regex
     // FIXME: Or should this validation be included in a NormalizePackageId method?
@@ -460,7 +472,7 @@ public class PackageStore : IPackageStore {
     Directory.CreateDirectory(packageDir);
     var packagePath = Path.Combine(packageDir, $"{id}.{version}{ext}");
     try {
-      File.Move(tempFile, packagePath, ext == PackageStore.SymbolPackageExtension);
+      File.Move(tempFile, packagePath, ext == Constants.SymbolsExtension);
       this._logger.LogInformation("Stored package in {path}.", packagePath);
       return packagePath;
     }
