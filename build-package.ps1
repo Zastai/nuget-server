@@ -58,8 +58,8 @@ dotnet test $opts --no-build "-c:$Configuration"
 Complete-BuildStep 'test' 'UNIT TESTS'
 
 Write-Host 'Publishing...'
-dotnet publish $opts --no-build "-c:$Configuration" "-o:$PublishFolder"
-Complete-BuildStep 'pack' 'PUBLISH'
+dotnet publish $opts Zastai.NuGet.Server --no-build "-c:$Configuration" "-o:$PublishFolder"
+Complete-BuildStep 'publish' 'PUBLISH'
 
 Write-Host 'Creating Zip File...'
 Push-Location $PublishFolder
