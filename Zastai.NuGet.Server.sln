@@ -5,6 +5,8 @@ VisualStudioVersion = 17.0.31912.275
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Zastai.NuGet.Server", "Zastai.NuGet.Server\Zastai.NuGet.Server.csproj", "{81A574BD-6DE8-43FB-9C5D-9D58B3B61A67}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PackageImport", "PackageImport\PackageImport.csproj", "{2A1F2244-F1F7-44AE-AB81-6F381A3D1445}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -15,6 +17,10 @@ Global
 		{81A574BD-6DE8-43FB-9C5D-9D58B3B61A67}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{81A574BD-6DE8-43FB-9C5D-9D58B3B61A67}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{81A574BD-6DE8-43FB-9C5D-9D58B3B61A67}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2A1F2244-F1F7-44AE-AB81-6F381A3D1445}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2A1F2244-F1F7-44AE-AB81-6F381A3D1445}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2A1F2244-F1F7-44AE-AB81-6F381A3D1445}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2A1F2244-F1F7-44AE-AB81-6F381A3D1445}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
