@@ -1,4 +1,5 @@
 ﻿using System.Collections.Concurrent;
+using System.Runtime.CompilerServices;
 using System.Text;
 
 using NuGet.Configuration;
@@ -67,11 +68,11 @@ internal sealed class Importer : IDisposable {
 
   public void Dispose() => this._cache.Dispose();
 
-  private async IAsyncEnumerable<PackageIdentity> FindMatchingPackagesAsync(SourceRepository repository, string id,
-                                                                            VersionRange range) {
-    var findPackageResource = await repository.GetResourceAsync<FindPackageByIdResource>();
+  private async IAsyncEnumerable<PackageIdentity> FindPackagesAsync(SourceRepository repository, string id, VersionRange range,
+                                                                    [EnumeratorCancellation] CancellationToken ct = default) {
+    var findPackageResource = await repository.GetResourceAsync<FindPackageByIdResource>(ct);
     if (findPackageResource is not null) {
-      foreach (var version in await findPackageResource.GetAllVersionsAsync(id, this._cache, this._logger, default)) {
+      foreach (var version in await findPackageResource.GetAllVersionsAsync(id, this._cache, this._logger, ct)) {
         if (version is null) {
           continue;
         }
@@ -91,21 +92,22 @@ internal sealed class Importer : IDisposable {
     }
   }
 
-  private async Task<bool> ImportDependency(PackageDownloadContext ctx, PackageIdentity dependency, NuGetFramework tfm) {
+  private async Task<bool> ImportDependencyAsync(PackageDownloadContext ctx, PackageIdentity dependency, NuGetFramework tfm,
+                                                 CancellationToken ct = default) {
     if (!this._importedPackages.ContainsKey(dependency)) {
       await this._logger.LogInformationAsync($"Importing dependency {dependency} (target framework: {tfm}).");
-      return await this.TryImportAsync(ctx, dependency);
+      return await this.TryImportAsync(ctx, dependency, ct);
     }
     await this._logger.LogVerboseAsync($"Skipping import for already-imported dependency {dependency} (target " +
                                        $"framework: {tfm}).");
     return true;
   }
 
-  public async Task<bool> ImportPackageListAsync(string file, bool stopOnError = false) {
+  public async Task<bool> ImportPackageListAsync(string file, bool stopOnError = false, CancellationToken ct = default) {
     var errors = 0;
     try {
       var lineNumber = 0;
-      foreach (var line in await File.ReadAllLinesAsync(file, Encoding.UTF8)) {
+      foreach (var line in await File.ReadAllLinesAsync(file, Encoding.UTF8, ct)) {
         ++lineNumber;
         if (string.IsNullOrWhiteSpace(line)) {
           continue;
@@ -118,7 +120,7 @@ internal sealed class Importer : IDisposable {
           await this._logger.LogErrorAsync($"{file}:{lineNumber}: invalid line (need package name and version): '{line}'.");
           goto error;
         }
-        if (!await this.ImportSinglePackageAsync(parts[0], parts[1])) {
+        if (!await this.ImportSinglePackageAsync(parts[0], parts[1], ct)) {
           goto error;
         }
         continue;
@@ -139,7 +141,7 @@ internal sealed class Importer : IDisposable {
     return errors == 0;
   }
 
-  public async Task<bool> ImportSinglePackageAsync(string id, string versionString) {
+  public async Task<bool> ImportSinglePackageAsync(string id, string versionString, CancellationToken ct = default) {
     VersionRange range;
     if (NuGetVersion.TryParse(versionString, out var version)) {
       // Treat an exact version as an exact-match request (i.e. a range of [version])
@@ -152,8 +154,8 @@ internal sealed class Importer : IDisposable {
     var success = true;
     await this._logger.LogMinimalAsync($"Importing packages matching {id} {range} from {this._source.PackageSource}.");
     var ctx = new PackageDownloadContext(this._cache);
-    await foreach (var package in this.FindMatchingPackagesAsync(this._source, id, range)) {
-      success = await this.TryImportAsync(ctx, package) && success;
+    await foreach (var package in this.FindPackagesAsync(this._source, id, range, ct)) {
+      success = await this.TryImportAsync(ctx, package, ct) && success;
     }
     return success;
   }
@@ -168,19 +170,22 @@ internal sealed class Importer : IDisposable {
 
   public int TimeOut { get; set; } = Importer.DefaultTimeOut;
 
-  private async Task<bool> TryImportAsync(PackageDownloadContext ctx, PackageIdentity id) {
+  private async Task<bool> TryImportAsync(PackageDownloadContext ctx, PackageIdentity id, CancellationToken ct = default) {
     var globalPackages = SettingsUtility.GetGlobalPackagesFolder(this._settings);
-    var downloader = await this._source.GetResourceAsync<DownloadResource>();
+    var downloader = await this._source.GetResourceAsync<DownloadResource>(ct);
     if (downloader is null) {
       await this._logger.LogErrorAsync("Could not determine how to download packages from the specified source feed.");
       return false;
     }
-    using var downloadResult = await downloader.GetDownloadResourceResultAsync(id, ctx, globalPackages, this._logger, default);
+    using var downloadResult = await downloader.GetDownloadResourceResultAsync(id, ctx, globalPackages, this._logger, ct);
     if (downloadResult is null) {
       await this._logger.LogErrorAsync($"An attempt to download package {id} produced no result.");
       return false;
     }
     switch (downloadResult.Status) {
+      case DownloadResourceResultStatus.Available:
+        // OK
+        break;
       case DownloadResourceResultStatus.AvailableWithoutStream:
         await this._logger.LogErrorAsync($"Package {id} was found in source '{this._source}', but its data was not available.");
         return false;
@@ -190,11 +195,14 @@ internal sealed class Importer : IDisposable {
       case DownloadResourceResultStatus.NotFound:
         await this._logger.LogErrorAsync($"Package {id} was not found in source '{this._source}'.");
         return false;
+      default:
+        await this._logger.LogErrorAsync($"The download of package {id} returned an unhandled status ({downloadResult.Status}).");
+        return false;
     }
     var packageSize = downloadResult.PackageStream.Length;
     // FIXME: This should (perhaps based on a flag) acquire the symbols package too - but there does not seem to be an endpoint
     //        for retrieving the snupkg, only for pushing it.
-    var pusher = await this._target.GetResourceAsync<PackageUpdateResource>();
+    var pusher = await this._target.GetResourceAsync<PackageUpdateResource>(ct);
     if (pusher is null) {
       await this._logger.LogErrorAsync("Could not determine how to push packages to the specified target feed.");
       return false;
@@ -206,7 +214,7 @@ internal sealed class Importer : IDisposable {
       var packageTempFile = Path.GetTempFileName();
       try {
         await using (var file = File.OpenWrite(packageTempFile)) {
-          await downloadResult.PackageStream.CopyToAsync(file);
+          await downloadResult.PackageStream.CopyToAsync(file, ct);
         }
         var packagePaths = new List<string> { packageTempFile };
         var ps = this._target.PackageSource;
@@ -229,29 +237,29 @@ internal sealed class Importer : IDisposable {
       }
     }
     this._importedPackages.TryAdd(id, 42);
+    if (this.IncludeDependencies == IncludeDependencies.None) {
+      return true;
+    }
     var success = true;
-    if (this.IncludeDependencies != IncludeDependencies.None) {
-      // FIXME: Possibly filter this based on configured framework
-      foreach (var pdg in downloadResult.PackageReader.GetPackageDependencies()) {
-        var tfm = pdg.TargetFramework;
-        if (this.DependencyFrameworks.Count != 0 && !this.DependencyFrameworks.Contains(tfm)) {
-          await this._logger.LogVerboseAsync($"Skipping dependency group for target framework '{tfm}'.");
-          continue;
-        }
-        foreach (var pd in pdg.Packages) {
-          PackageIdentity? selectedDependency = null;
-          await foreach (var dependency in this.FindMatchingPackagesAsync(this._source, pd.Id, pd.VersionRange)) {
-            if (this.IncludeDependencies == IncludeDependencies.BestMatch) {
-              if (pd.VersionRange.IsBetter(selectedDependency?.Version, dependency.Version)) {
-                selectedDependency = dependency;
-              }
-              continue;
+    foreach (var pdg in await downloadResult.PackageReader.GetPackageDependenciesAsync(ct)) {
+      var tfm = pdg.TargetFramework;
+      if (this.DependencyFrameworks.Count != 0 && !this.DependencyFrameworks.Contains(tfm)) {
+        await this._logger.LogVerboseAsync($"Skipping dependency group for target framework '{tfm}'.");
+        continue;
+      }
+      foreach (var pd in pdg.Packages) {
+        PackageIdentity? selectedDependency = null;
+        await foreach (var dependency in this.FindPackagesAsync(this._source, pd.Id, pd.VersionRange, ct)) {
+          if (this.IncludeDependencies == IncludeDependencies.BestMatch) {
+            if (pd.VersionRange.IsBetter(selectedDependency?.Version, dependency.Version)) {
+              selectedDependency = dependency;
             }
-            success = await this.ImportDependency(ctx, dependency, tfm) && success;
+            continue;
           }
-          if (selectedDependency is not null) {
-            success = await this.ImportDependency(ctx, selectedDependency, tfm) && success;
-          }
+          success = await this.ImportDependencyAsync(ctx, dependency, tfm, ct) && success;
+        }
+        if (selectedDependency is not null) {
+          success = await this.ImportDependencyAsync(ctx, selectedDependency, tfm, ct) && success;
         }
       }
     }

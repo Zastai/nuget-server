@@ -47,6 +47,7 @@ public static class Program {
   }
 
   public static async Task<int> Main(string[] args) {
+    var cancellation = new CancellationTokenSource();
     var logger = new SimpleConsoleLogger();
     if (args.Length < 4) {
       return await Program.UsageAsync();
@@ -227,12 +228,12 @@ public static class Program {
         await logger.LogErrorAsync($"The specified package list ({packageList}) does not exist.");
         return 3;
       }
-      if (!await importer.ImportPackageListAsync(packageList)) {
+      if (!await importer.ImportPackageListAsync(packageList, ct: cancellation.Token)) {
         return 4;
       }
     }
     else if (packageName is not null && packageVersion is not null) {
-      if (!await importer.ImportSinglePackageAsync(packageName, packageVersion)) {
+      if (!await importer.ImportSinglePackageAsync(packageName, packageVersion, cancellation.Token)) {
         return 5;
       }
     }
