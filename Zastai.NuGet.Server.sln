@@ -10,6 +10,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Support Files", "Support Fi
 		.gitignore = .gitignore
 		appveyor.yml = appveyor.yml
 		build-package.ps1 = build-package.ps1
+		Directory.Packages.props = Directory.Packages.props
 		LICENSE.md = LICENSE.md
 		README.md = README.md
 	EndProjectSection
@@ -27,9 +28,9 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Actions", "Actions", "{E68C
 		.github\workflows\update-labels.yml = .github\workflows\update-labels.yml
 	EndProjectSection
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PackageImport", "PackageImport\PackageImport.csproj", "{2A1F2244-F1F7-44AE-AB81-6F381A3D1445}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "PackageImport", "PackageImport\PackageImport.csproj", "{2A1F2244-F1F7-44AE-AB81-6F381A3D1445}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Zastai.NuGet.Server", "Zastai.NuGet.Server\Zastai.NuGet.Server.csproj", "{81A574BD-6DE8-43FB-9C5D-9D58B3B61A67}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Zastai.NuGet.Server", "Zastai.NuGet.Server\Zastai.NuGet.Server.csproj", "{81A574BD-6DE8-43FB-9C5D-9D58B3B61A67}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -37,23 +38,23 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{81A574BD-6DE8-43FB-9C5D-9D58B3B61A67}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{81A574BD-6DE8-43FB-9C5D-9D58B3B61A67}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{81A574BD-6DE8-43FB-9C5D-9D58B3B61A67}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{81A574BD-6DE8-43FB-9C5D-9D58B3B61A67}.Release|Any CPU.Build.0 = Release|Any CPU
 		{2A1F2244-F1F7-44AE-AB81-6F381A3D1445}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{2A1F2244-F1F7-44AE-AB81-6F381A3D1445}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{2A1F2244-F1F7-44AE-AB81-6F381A3D1445}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{2A1F2244-F1F7-44AE-AB81-6F381A3D1445}.Release|Any CPU.Build.0 = Release|Any CPU
+		{81A574BD-6DE8-43FB-9C5D-9D58B3B61A67}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{81A574BD-6DE8-43FB-9C5D-9D58B3B61A67}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{81A574BD-6DE8-43FB-9C5D-9D58B3B61A67}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{81A574BD-6DE8-43FB-9C5D-9D58B3B61A67}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
-	GlobalSection(ExtensibilityGlobals) = postSolution
-		SolutionGuid = {81C761B2-63AA-4F28-B124-9F1C18BFC3B7}
-	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{7F5E5B49-33CC-4A65-AA61-C560C41BB78A} = {DB6AAA72-E5CD-4BA9-844E-D37C242B847A}
 		{E68C3DBF-1BCF-4C19-9D83-3631DE1D151E} = {7F5E5B49-33CC-4A65-AA61-C560C41BB78A}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {81C761B2-63AA-4F28-B124-9F1C18BFC3B7}
 	EndGlobalSection
 EndGlobal
