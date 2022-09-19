@@ -12,12 +12,12 @@ public class CertificateFingerprints {
   /// <summary>Creates a new set of fingerprints for a signing certificate.</summary>
   /// <param name="sha256">The SHA-256 fingerprint.</param>
   public CertificateFingerprints(string sha256) {
-    this.SHA256 = sha256;
+    this.Sha256 = sha256;
   }
 
   /// <summary>The SHA-256 fingerprint.</summary>
   [JsonPropertyName("2.16.840.1.101.3.4.2.1")]
   [Required]
-  public string SHA256 { get; }
+  public string Sha256 { get; }
 
 }

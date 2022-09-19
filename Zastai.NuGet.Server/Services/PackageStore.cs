@@ -235,10 +235,8 @@ public class PackageStore : IPackageStore {
       return Array.Empty<string>();
     }
     // TODO: Validate version-ness, or just filter out any specific technical directories that might be known to exist.
-    return Directory.EnumerateDirectories(packageDir, "*.*", SearchOption.TopDirectoryOnly)
-                    .Select(dir => Path.GetFileName(dir) ?? "")
-                    .Where(dir => dir.Length > 0)
-                    .ToList();
+    // The compiler does not see the [NotNullIfNotNull] on Path.GetFileName(), so add an OfType() to filter nulls
+    return Directory.EnumerateDirectories(packageDir, "*.*").Select(Path.GetFileName).OfType<string>().ToList();
   }
 
   /// <inheritdoc />

@@ -12,7 +12,7 @@ public sealed class RepositorySignatures {
   /// <summary>Indicates whether or not all packages stored in the server are signed.</summary>
   [JsonPropertyName("allRepositorySigned")]
   [Required]
-  public bool AllPackagesAreSigned { get; } = false;
+  public bool AllPackagesAreSigned { get; }
 
   /// <summary>The signing certificates used by the server.</summary>
   [JsonPropertyName("signingCertificates")]

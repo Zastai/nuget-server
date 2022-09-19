@@ -6,7 +6,7 @@
   <title>@this.ViewData["Title"] - NuGet Server</title>
   <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css"/>
   <link rel="stylesheet" href="~/css/site.css" asp-append-version="true"/>
-  <link rel="stylesheet" href="~/Zastai.NuGet.Server.styles.css" asp-append-version="true"/>
+  @* <link rel="stylesheet" href="~/Zastai.NuGet.Server.styles.css" asp-append-version="true"/> *@
 </head>
 <body>
 <header>
@@ -24,7 +24,7 @@
           </li>
           <environment names="Development">
             <li class="nav-item">
-              <a class="nav-link text-dark" href="/swagger">API Reference</a>
+              <a class="nav-link text-dark" href="/swagger/">API Reference</a>
             </li>
           </environment>
           <li class="nav-item">
