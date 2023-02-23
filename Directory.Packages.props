@@ -6,7 +6,7 @@
 
   <ItemGroup>
     <PackageVersion Include="JetBrains.Annotations" Version="2022.1.0" />
-    <PackageVersion Include="NuGet.Commands" Version="6.3.0" />
+    <PackageVersion Include="NuGet.Commands" Version="6.5.0" />
     <PackageVersion Include="Swashbuckle.AspNetCore" Version="6.4.0" />
   </ItemGroup>
 
