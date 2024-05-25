@@ -13,8 +13,8 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
 
   /// <summary>Creates a new authentication handler for NuGet API keys.</summary>
   public ApiKeyAuthenticationHandler(IOptionsMonitor<ApiKeyAuthenticationOptions> options, ILoggerFactory logger,
-                                     UrlEncoder encoder, ISystemClock clock, IApiKeyStore keys, IUserStore users)
-    : base(options, logger, encoder, clock) {
+                                     UrlEncoder encoder, IApiKeyStore keys, IUserStore users)
+    : base(options, logger, encoder) {
     this._keys = keys;
     this._users = users;
   }
@@ -44,7 +44,7 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAuthentic
       this.Logger.LogError("Invalid API key ({k}) specified for '{m} {p}'.", apiKeyString, req.Method, req.Path);
       return AuthenticateResult.Fail("Invalid API key.");
     }
-    if (this.Clock.UtcNow > apiKey.Expiry) {
+    if (this.TimeProvider.GetUtcNow() > apiKey.Expiry) {
       this.Logger.LogError("Expired API key ({k}) specified for '{m} {p}'.", apiKeyString, req.Method, req.Path);
       return AuthenticateResult.Fail("Expired API key.");
     }
