@@ -142,7 +142,7 @@ internal sealed class Importer : IDisposable {
   }
 
   public async Task<bool> ImportSinglePackageAsync(string id, string versionString, CancellationToken ct = default) {
-    VersionRange range;
+    VersionRange? range;
     if (NuGetVersion.TryParse(versionString, out var version)) {
       // Treat an exact version as an exact-match request (i.e. a range of [version])
       range = new VersionRange(version, true, version, true, null, versionString);
