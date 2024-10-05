@@ -1,6 +1,8 @@
 /.idea/
 /.vs/
 /.vscode/
+/gh-build-*/
+/publish/
 /test/
 bin/
 obj/
@@ -10,3 +12,4 @@ msbuild.*.binlog
 *.*proj.user
 *.DotSettings.user
 *.userprefs
+Zastai.NuGet.Server.zip
