@@ -38,7 +38,12 @@ if ($ContinuousIntegration) {
 }
 
 # The top-level folder used as target for the publish step (before being zipped).
-$PublishFolder = 'publish'
+if ($ContinuousIntegration) {
+  $PublishFolder = "gh-build-${Configuration}"
+}
+else {
+  $PublishFolder = 'publish'
+}
 
 # The zip file created after the publish step.
 # FIXME: Can we easily get any version info included in this name?
@@ -68,12 +73,8 @@ dotnet publish $opts PackageImport       --no-build "-c:$Configuration" "-o:$Pub
 dotnet publish $opts Zastai.NuGet.Server --no-build "-c:$Configuration" "-o:$PublishFolder/server"
 Complete-BuildStep 'publish' 'PUBLISH'
 
-Write-Host 'Creating Zip File...'
-Push-Location $PublishFolder
-try {
-  Compress-Archive -Force -Path * -DestinationPath "..\$ZipFile"
+if (-not $ContinuousIntegration) {
+  Write-Host 'Creating Zip File...'
+  Compress-Archive -Force -Path $PublishFolder/* -DestinationPath $ZipFile
+  Remove-Item -Recurse -Force $PublishFolder
 }
-finally {
-  Pop-Location
-}
-Remove-Item -Recurse -Force $PublishFolder

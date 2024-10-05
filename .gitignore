@@ -1,6 +1,7 @@
 /.idea/
 /.vs/
 /.vscode/
+/gh-build-*/
 /publish/
 /test/
 bin/

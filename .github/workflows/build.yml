@@ -32,7 +32,7 @@ jobs:
     - name: Create global.json to force use of .NET SDK ${{steps.setup.outputs.dotnet-version}}
       run: echo '{"sdk":{"version":"${{steps.setup.outputs.dotnet-version}}"}}' > ./global.json
     - name: Run build script (${{matrix.configuration}})
-      run: pwsh -f ./build-package.ps1 -ContinuousIntegration -WithBinLog -Configuration ${{matrix.configuration}}
+      run: pwsh -f ./build-package.ps1 -Configuration ${{matrix.configuration}} -ContinuousIntegration -WithBinLog
     - name: "Artifact: MSBuild Logs"
       uses: actions/upload-artifact@v4
       if: failure()
@@ -43,4 +43,4 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: Publish Output (${{matrix.configuration}})
-        path: "Zastai.NuGet.Server.zip"
+        path: gh-build-${{matrix.configuration}}/*
