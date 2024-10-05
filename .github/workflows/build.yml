@@ -1,0 +1,46 @@
+﻿name: Build
+
+on:
+  push:
+    branches:
+      - 'main'
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+  pull_request:
+    branches:
+      - 'main'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      dotnet-version: 8.0.x
+    strategy:
+      matrix:
+        configuration: ['Debug', 'Release']
+
+    steps:
+    - name: Check out the project
+      uses: actions/checkout@v4
+    - name: Set up .NET ${{env.dotnet-version}}
+      uses: actions/setup-dotnet@v4
+      id: setup
+      with:
+        dotnet-version: ${{env.dotnet-version}}
+      env:
+        NUGET_AUTH_TOKEN: ${{secrets.GITHUB_TOKEN}}
+    - name: Create global.json to force use of .NET SDK ${{steps.setup.outputs.dotnet-version}}
+      run: echo '{"sdk":{"version":"${{steps.setup.outputs.dotnet-version}}"}}' > ./global.json
+    - name: Run build script (${{matrix.configuration}})
+      run: pwsh -f ./build-package.ps1 -ContinuousIntegration -WithBinLog -Configuration ${{matrix.configuration}}
+    - name: "Artifact: MSBuild Logs"
+      uses: actions/upload-artifact@v4
+      if: failure()
+      with:
+        name: MSBuild Logs (${{matrix.configuration}})
+        path: msbuild.*.binlog
+    - name: "Artifact: Publish Output"
+      uses: actions/upload-artifact@v4
+      with:
+        name: Publish Output (${{matrix.configuration}})
+        path: "Zastai.NuGet.Server.zip"
